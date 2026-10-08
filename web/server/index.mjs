@@ -237,6 +237,12 @@ const insertRadarItem = db.prepare(`
     price_amount, currency, notes, capture_method, state, created_at, updated_at
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
+const updateRadarItem = db.prepare(`
+  UPDATE radar_items SET
+    title = ?, neighborhood = ?, operation = ?, property_type = ?, source = ?, source_url = ?,
+    price_amount = ?, currency = ?, notes = ?, capture_method = ?, updated_at = ?
+  WHERE id = ? AND user_id = ?
+`)
 const updateRadarItemState = db.prepare('UPDATE radar_items SET state = ?, updated_at = ? WHERE id = ? AND user_id = ?')
 const insertOpportunity = db.prepare(`
   INSERT INTO opportunities (
@@ -641,6 +647,32 @@ const server = createServer(async (request, response) => {
       const createdAt = now()
       await insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, 'detected', createdAt, createdAt)
       return sendJson(response, 201, { items: await listRadarItems.all(user.id) })
+    }
+
+    const radarItemMatch = url.pathname.match(/^\/api\/radar-items\/([\w-]+)$/)
+    if (request.method === 'PUT' && radarItemMatch) {
+      const user = await requireUser(request, response); if (!user) return
+      const item = await getRadarItem.get(radarItemMatch[1], user.id)
+      if (!item) return sendJson(response, 404, { error: 'Hallazgo no encontrado.' })
+      if (item.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad. Editá la oportunidad resultante.' })
+      const body = await readBody(request)
+      const title = clean(body.title, 160)
+      const neighborhood = clean(body.neighborhood, 40)
+      const operation = clean(body.operation, 20)
+      const propertyType = clean(body.propertyType, 30)
+      const source = clean(body.source, 40)
+      const sourceUrl = clean(body.sourceUrl, 1000)
+      const priceRaw = clean(body.priceAmount, 12)
+      const priceAmount = priceRaw ? Number(priceRaw) : null
+      const currency = clean(body.currency || 'USD', 10)
+      const notes = clean(body.notes, 1200)
+      const captureMethod = clean(body.captureMethod || 'manual', 30)
+      if (title.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !RADAR_SOURCES.includes(source) || !validUrl(sourceUrl) || !sourceUrl) return sendJson(response, 400, { error: 'Completá referencia, zona, operación, tipo, portal y enlace válido.' })
+      if (priceAmount !== null && (!Number.isInteger(priceAmount) || priceAmount <= 0)) return sendJson(response, 400, { error: 'El precio debe ser un número entero positivo.' })
+      if (!['USD', 'ARS'].includes(currency)) return sendJson(response, 400, { error: 'Elegí una moneda válida.' })
+      if (!RADAR_CAPTURE_METHODS.includes(captureMethod)) return sendJson(response, 400, { error: 'El método de carga no es válido.' })
+      await updateRadarItem.run(title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, now(), item.id, user.id)
+      return sendJson(response, 200, { items: await listRadarItems.all(user.id) })
     }
 
     const radarStateMatch = url.pathname.match(/^\/api\/radar-items\/([\w-]+)\/state$/)

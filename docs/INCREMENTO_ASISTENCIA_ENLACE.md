@@ -32,6 +32,8 @@ Todas las sugerencias permanecen editables y la pantalla advierte que deben comp
 
 El usuario también puede elegir **Completar manualmente** después de pegar un enlace. Esa elección descarta las sugerencias aplicadas, reinicia los campos sugeridos y registra el hallazgo como `manual`.
 
+Los hallazgos que aún no fueron convertidos se pueden editar desde su tarjeta. El formulario conserva los valores existentes; si se modifica el enlace, vuelve a ofrecer sugerencias locales y actualiza el método de procedencia elegido. No se vuelve a consultar el portal al editar.
+
 El precio queda vacío: no se intenta inferirlo ni se toma contenido, texto, imágenes o metadatos del portal.
 
 ## Límites técnicos y de datos
@@ -73,6 +75,7 @@ La etiqueta se muestra en cada tarjeta de Radar y se conserva cuando el hallazgo
 - lint y sintaxis del servidor;
 - creación de un hallazgo con `capture_method = url_assisted` en una base temporal;
 - comprobación de ambos métodos de procedencia y de su conservación al convertir el hallazgo;
+- edición de un hallazgo, persistencia de sus campos y rechazo de edición luego de convertirlo;
 - chequeo de que el servidor no posee rutas de importación ni solicitudes HTTP salientes para Radar.
 
 ## Evolución posible

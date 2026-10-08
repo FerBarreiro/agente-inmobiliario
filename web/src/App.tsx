@@ -356,6 +356,7 @@ function RadarView({ isCreateOpen, onCloseCreate, onDashboard }: { isCreateOpen:
   const [filter, setFilter] = useState<'all' | RadarState>('all')
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [editingItem, setEditingItem] = useState<RadarItem | null>(null)
 
   const loadItems = async () => {
     try { setItems((await api<RadarItemsResponse>('/api/radar-items')).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo cargar el Radar.') }
@@ -401,11 +402,11 @@ function RadarView({ isCreateOpen, onCloseCreate, onDashboard }: { isCreateOpen:
       <h3>{item.title}</h3><p className="radar-location">{item.neighborhood} · {item.propertyType} · {item.operation}</p>
       {item.priceAmount !== null && <strong className="radar-price">{formatMoney(item.priceAmount, item.currency)}</strong>}
       {item.notes && <p className="radar-card-notes">{item.notes}</p>}
-      <div className="radar-actions radar-actions-stack"><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ver oportunidad ↗</a>{item.state === 'detected' && <button type="button" disabled={busyId === item.id} onClick={() => void changeState(item, 'review')}>{busyId === item.id ? 'Actualizando…' : 'Marcar para revisar'}</button>}{item.state === 'reviewing' && <><button type="button" disabled={busyId === item.id} onClick={() => void convertToOpportunity(item)}>{busyId === item.id ? 'Convirtiendo…' : 'Convertir en oportunidad'}</button><button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => void changeState(item, 'discard')}>Descartar</button></>}{item.state === 'discarded' && <button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => void changeState(item, 'restore')}>Volver a hallazgos</button>}</div>
+      <div className="radar-actions radar-actions-stack"><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ver oportunidad ↗</a><button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => setEditingItem(item)}>Editar hallazgo</button>{item.state === 'detected' && <button type="button" disabled={busyId === item.id} onClick={() => void changeState(item, 'review')}>{busyId === item.id ? 'Actualizando…' : 'Marcar para revisar'}</button>}{item.state === 'reviewing' && <><button type="button" disabled={busyId === item.id} onClick={() => void convertToOpportunity(item)}>{busyId === item.id ? 'Convirtiendo…' : 'Convertir en oportunidad'}</button><button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => void changeState(item, 'discard')}>Descartar</button></>}{item.state === 'discarded' && <button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => void changeState(item, 'restore')}>Volver a hallazgos</button>}</div>
     </article>)}
     {visibleItems.length === 0 && <div className="empty-card radar-empty"><strong>Tu Radar todavía está vacío</strong><p>Abrí un portal, elegí un aviso de forma manual y cargá un enlace para revisarlo después.</p></div>}</div>
     <p className="radar-legal-note">Un aviso público no confirma que sea dueño directo ni que acepte intermediación. Antes de crear una oportunidad, verificá el aviso, sus restricciones y el canal de contacto.</p>
-    {isCreateOpen && <RadarItemModal onClose={onCloseCreate} onSaved={(nextItems) => { setItems(nextItems); onCloseCreate() }} />}
+    {(isCreateOpen || editingItem) && <RadarItemModal item={editingItem ?? undefined} onClose={() => { setEditingItem(null); onCloseCreate() }} onSaved={(nextItems) => { setItems(nextItems); setEditingItem(null); onCloseCreate() }} />}
   </section>
 }
 
@@ -500,18 +501,18 @@ function ProfileModal({ user, onClose, onSaved }: { user: User; onClose: () => v
   </section></div>
 }
 
-function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (items: RadarItem[]) => void }) {
+function RadarItemModal({ item, onClose, onSaved }: { item?: RadarItem; onClose: () => void; onSaved: (items: RadarItem[]) => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [title, setTitle] = useState('')
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [source, setSource] = useState('Otro')
-  const [neighborhood, setNeighborhood] = useState(neighborhoods[0])
-  const [operation, setOperation] = useState('Venta')
-  const [propertyType, setPropertyType] = useState(propertyTypes[0])
-  const [captureMethod, setCaptureMethod] = useState<RadarCaptureMethod>('manual')
-  const [urlSuggestion, setUrlSuggestion] = useState<ReturnType<typeof inferRadarUrl>>(null)
-  const [titleEdited, setTitleEdited] = useState(false)
+  const [title, setTitle] = useState(item?.title ?? '')
+  const [sourceUrl, setSourceUrl] = useState(item?.sourceUrl ?? '')
+  const [source, setSource] = useState(item?.source ?? 'Otro')
+  const [neighborhood, setNeighborhood] = useState(item?.neighborhood ?? neighborhoods[0])
+  const [operation, setOperation] = useState(item?.operation ?? 'Venta')
+  const [propertyType, setPropertyType] = useState(item?.propertyType ?? propertyTypes[0])
+  const [captureMethod, setCaptureMethod] = useState<RadarCaptureMethod>(item?.captureMethod ?? 'manual')
+  const [urlSuggestion, setUrlSuggestion] = useState<ReturnType<typeof inferRadarUrl>>(item?.captureMethod === 'url_assisted' ? inferRadarUrl(item.sourceUrl) : null)
+  const [titleEdited, setTitleEdited] = useState(Boolean(item))
 
   const updateFromUrl = (value: string) => {
     setSourceUrl(value)
@@ -521,7 +522,7 @@ function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (i
     setCaptureMethod('url_assisted')
     setSource(suggestion.source)
     if (suggestion.neighborhood) setNeighborhood(suggestion.neighborhood)
-    if (suggestion.operation) setOperation(suggestion.operation)
+    if (suggestion.operation) setOperation(suggestion.operation as 'Venta' | 'Alquiler')
     if (suggestion.propertyType) setPropertyType(suggestion.propertyType)
     if (!titleEdited) setTitle(suggestion.title)
   }
@@ -541,21 +542,21 @@ function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (i
     setBusy(true)
     setError('')
     const data = new FormData(event.currentTarget)
-    try { onSaved((await api<RadarItemsResponse>('/api/radar-items', { method: 'POST', body: JSON.stringify(Object.fromEntries(data.entries())) })).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar el hallazgo.') } finally { setBusy(false) }
+    try { onSaved((await api<RadarItemsResponse>(item ? `/api/radar-items/${item.id}` : '/api/radar-items', { method: item ? 'PUT' : 'POST', body: JSON.stringify(Object.fromEntries(data.entries())) })).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar el hallazgo.') } finally { setBusy(false) }
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="radar-modal-title" onMouseDown={(event) => event.stopPropagation()}>
-    <button className="modal-close" type="button" onClick={onClose}>×</button><p className="eyebrow">CARGA PRIVADA · SIN CONTACTOS</p><h2 id="radar-modal-title">Cargar hallazgo</h2><p className="modal-description">Pegá primero el enlace. La app interpreta localmente el texto de la URL para sugerir datos; no abre ni lee el aviso del portal. No copies fotos, descripciones completas ni datos personales.</p>
+    <button className="modal-close" type="button" onClick={onClose}>×</button><p className="eyebrow">{item ? 'EDICIÓN PRIVADA · SIN CONTACTOS' : 'CARGA PRIVADA · SIN CONTACTOS'}</p><h2 id="radar-modal-title">{item ? 'Editar hallazgo' : 'Cargar hallazgo'}</h2><p className="modal-description">Pegá primero el enlace. La app interpreta localmente el texto de la URL para sugerir datos; no abre ni lee el aviso del portal. No copies fotos, descripciones completas ni datos personales.</p>
     <form onSubmit={save}>
       <label>Enlace de la publicación<input name="sourceUrl" value={sourceUrl} onChange={(event) => updateFromUrl(event.target.value)} type="url" placeholder="https://…" autoFocus required /></label>
       {urlSuggestion && <p className="url-assist-notice"><strong>Asistencia desde enlace</strong> · {source} detectado{urlSuggestion.neighborhood ? ` · ${urlSuggestion.neighborhood}` : ''}{urlSuggestion.operation ? ` · ${urlSuggestion.operation}` : ''}. Verificá las sugerencias frente al aviso original antes de guardar. <button className="text-button" type="button" onClick={switchToManualEntry}>Completar manualmente</button></p>}
       <input name="captureMethod" type="hidden" value={captureMethod} />
       <div className="form-row"><label>Referencia del aviso<input name="title" value={title} onChange={(event) => { setTitle(event.target.value); setTitleEdited(true) }} placeholder="Ej. Depto 3 amb. con balcón" minLength={2} required /></label><label>Portal<select name="source" value={source} onChange={(event) => setSource(event.target.value)}><option>Mercado Libre</option><option>Zonaprop</option><option>Argenprop</option><option>Otro</option></select></label></div>
-      <div className="form-row"><label>Barrio<select name="neighborhood" value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)}>{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation" value={operation} onChange={(event) => setOperation(event.target.value)}><option>Venta</option><option>Alquiler</option></select></label></div>
-      <div className="form-row"><label>Tipo de propiedad<select name="propertyType" value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="1" step="1" inputMode="numeric" placeholder="Ej. 185000" /></label></div>
-      <div className="form-row"><label>Moneda<select name="currency"><option>USD</option><option>ARS</option></select></label><span /></div>
-      <label>Notas <span className="optional">opcionales</span><textarea name="notes" rows={3} placeholder="Sólo observaciones propias y necesarias para decidir si revisarlo." /></label>
+      <div className="form-row"><label>Barrio<select name="neighborhood" value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)}>{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation" value={operation} onChange={(event) => setOperation(event.target.value as 'Venta' | 'Alquiler')}><option>Venta</option><option>Alquiler</option></select></label></div>
+      <div className="form-row"><label>Tipo de propiedad<select name="propertyType" value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="1" step="1" inputMode="numeric" defaultValue={item?.priceAmount ?? ''} placeholder="Ej. 185000" /></label></div>
+      <div className="form-row"><label>Moneda<select name="currency" defaultValue={item?.currency ?? 'USD'}><option>USD</option><option>ARS</option></select></label><span /></div>
+      <label>Notas <span className="optional">opcionales</span><textarea name="notes" defaultValue={item?.notes ?? ''} rows={3} placeholder="Sólo observaciones propias y necesarias para decidir si revisarlo." /></label>
       {error && <p className="form-error">{error}</p>}
-      <div className="modal-actions"><button type="button" className="cancel-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={busy} type="submit">{busy ? 'Guardando…' : 'Guardar hallazgo'}</button></div>
+      <div className="modal-actions"><button type="button" className="cancel-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={busy} type="submit">{busy ? 'Guardando…' : item ? 'Guardar cambios' : 'Guardar hallazgo'}</button></div>
     </form>
   </section></div>
 }

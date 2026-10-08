@@ -56,9 +56,13 @@ No admite datos de contacto. Tampoco se deben pegar descripciones completas, fot
 
 El usuario puede pegar primero la URL del aviso. La interfaz interpreta sólo ese texto de forma local para sugerir portal y, cuando aparezcan inequívocamente en la propia URL, barrio, operación o tipo de propiedad. No abre la página, no descarga HTML ni copia contenido del portal. La tarjeta queda identificada como **Asistida por URL** y las sugerencias deben revisarse antes de guardar. El diseño y los límites completos están en [`INCREMENTO_ASISTENCIA_ENLACE.md`](INCREMENTO_ASISTENCIA_ENLACE.md).
 
-### 3. Revisar, descartar o convertir
+### 3. Editar, revisar, descartar o convertir
 
-Cada tarjeta ofrece **Ver oportunidad**, que abre la URL original. Los estados son:
+Cada tarjeta que todavía no fue convertida ofrece **Editar hallazgo** además de **Ver oportunidad**, que abre la URL original. Editar abre el mismo formulario precargado y permite corregir referencia, enlace, clasificación, precio y notas. La operación se limita a la cuenta dueña del hallazgo y conserva su estado actual. Un hallazgo convertido se edita desde la oportunidad resultante, para no alterar retrospectivamente el registro de Radar.
+
+La actualización usa `PUT /api/radar-items/:id`. El servidor vuelve a validar todos los campos, filtra el registro por la cuenta autenticada y rechaza con `409` la edición de un hallazgo ya convertido.
+
+Los estados son:
 
 | Estado | Significado | Datos personales |
 |---|---|---|

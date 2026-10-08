@@ -36,6 +36,7 @@
 | D-029 | 2026-10-08 | Render despliega exclusivamente la rama `main`; `dev` se reserva para desarrollo y validación local. | Cada promoción remota queda ligada a un merge revisable hacia `main`, sin que cambios de trabajo en curso alcancen el servicio público. Reemplaza el uso temporal de `dev` en D-026. | Implementada |
 | D-030 | 2026-10-08 | El seguimiento de una oportunidad se expresa como preferencia operativa —incluido `No contactar` como bloqueo— y no como autorización genérica para insistir. | Diferencia seguimiento acordado, revisión latente, cierre y exclusión; evita convertir la falta de respuesta o una variación de precio en permiso de contacto. | Implementada localmente |
 | D-031 | 2026-10-08 | Radar puede interpretar localmente una URL aportada por el usuario y debe registrar la procedencia como `manual` o `url_assisted`. | Reduce carga sin abrir ni leer portales; hace visible la diferencia entre una sugerencia desde el texto del enlace y una futura fuente autorizada. | Implementada localmente |
+| D-032 | 2026-10-08 | Un hallazgo sin convertir puede editarse en su propia ficha de Radar; una vez convertido, la corrección se realiza en la oportunidad resultante. | Evita descartar y recargar por errores, respeta el aislamiento por cuenta y preserva la trazabilidad entre el hallazgo original y la oportunidad. | Implementada localmente |
 
 ## Cómo registrar cambios
 
