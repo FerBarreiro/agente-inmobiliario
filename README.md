@@ -17,7 +17,7 @@ Existe un prototipo web local con:
 - restricciones de contacto visibles y aplicadas en el servidor.
 - controles de producción: origen HTTPS autorizado, cabeceras de seguridad, límites de intentos, health check y soporte para PostgreSQL administrado.
 
-La aplicación es apta para desarrollo y validación con datos ficticios. El despliegue de validación con Render + Neon está activo en `dev`, pero **todavía no deben cargarse datos personales reales** hasta completar controles operativos, recuperación por correo configurada y validada, y revisión legal final. Ver [Base de producción segura](docs/PRODUCCION_SEGURA.md) y [Despliegue Render + Neon](docs/DESPLIEGUE_RENDER_NEON.md).
+La aplicación es apta para desarrollo y validación con datos ficticios. Render despliega la rama `main` contra Neon; la rama `dev` queda reservada para el trabajo local. **Todavía no deben cargarse datos personales reales** hasta completar controles operativos, recuperación por correo configurada y validada, y revisión legal final. Ver [Base de producción segura](docs/PRODUCCION_SEGURA.md) y [Despliegue Render + Neon](docs/DESPLIEGUE_RENDER_NEON.md).
 
 El estado canónico, la hoja de ruta y los límites están en [Estado actual y hoja de ruta](docs/ESTADO_ACTUAL_Y_HOJA_DE_RUTA.md). El índice completo está en [Documentación](docs/README.md).
 

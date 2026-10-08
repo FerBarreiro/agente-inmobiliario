@@ -33,7 +33,7 @@ Este directorio separa deliberadamente la visión futura, las decisiones vigente
 | [`AUTENTICACION_Y_DATOS.md`](AUTENTICACION_Y_DATOS.md) | Arquitectura de cuenta, datos y seguridad. | Implementación local; activación externa pendiente. |
 | [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md) | Restablecimiento de contraseña, tokens y correo transaccional. | Implementado y probado localmente; envío externo pendiente. |
 | [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md) | Endurecimiento de producción y precondiciones de datos reales. | Implementado; requiere verificación operativa antes de activarse. |
-| [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md) | Configuración versionada y activación segura de Render + Neon. | Entorno de validación activo sobre `dev`; no habilita datos personales reales. |
+| [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md) | Configuración versionada y activación segura de Render + Neon. | Render promueve desde `main`; `dev` queda para desarrollo local. No habilita datos personales reales. |
 | [`ESTRATEGIA_VALIDACION_Y_PORTALES.md`](ESTRATEGIA_VALIDACION_Y_PORTALES.md) | Estrategia de captación e integraciones autorizadas. | Aprobada; integraciones aún no implementadas. |
 
 ## Jerarquía ante diferencias

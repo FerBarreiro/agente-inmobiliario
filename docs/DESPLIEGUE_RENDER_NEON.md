@@ -1,7 +1,7 @@
 # Despliegue del piloto: Render + Neon
 
 **Fecha:** 2026-10-08
-**Estado:** despliegue de validación activo en Render sobre `dev`; Neon PostgreSQL conectado. Siguen pendientes la prueba funcional con datos sintéticos, revisión antes de integrar `main` y todos los controles previos a datos personales reales.
+**Estado:** Render despliega `main` contra Neon PostgreSQL. La rama `dev` se reserva para desarrollo local. Siguen pendientes la prueba funcional con datos sintéticos y todos los controles previos a datos personales reales.
 
 ## Decisión
 
@@ -37,11 +37,12 @@ Para futuras pruebas de esquema se debe crear una rama Neon separada; nunca prob
 
 ### 2. Render
 
-Se conectó el repositorio `FerBarreiro/agente-inmobiliario` y se creó el servicio de validación `agente-inmobiliario-dev` desde la rama `dev`. El Blueprint `render.yaml` conserva esta configuración para reproducirla:
+Se conectó el repositorio `FerBarreiro/agente-inmobiliario` al servicio existente `agente-inmobiliario-dev`, configurado para desplegar la rama `main`. El nombre y la URL contienen `-dev` por razones históricas, pero no indican la rama de despliegue: la referencia autoritativa es la configuración **Branch = `main`** en Render. El Blueprint `render.yaml` conserva la misma rama para futuras recreaciones:
 
 | Ajuste | Valor |
 |---|---|
 | Directorio raíz | `web` |
+| Rama de despliegue | `main` |
 | Build | `npm ci --include=dev && npm run build` |
 | Inicio | `npm start` |
 | Health check | `/api/health` |
@@ -57,7 +58,7 @@ Render provee `PORT` y, en producción, `RENDER_EXTERNAL_URL`. La aplicación ut
 3. Esperar un deploy exitoso y comprobar `https://<servicio>.onrender.com/api/health`. **Completado:** el servicio respondió `{"status":"ok"}`.
 4. Ingresar a la aplicación, crear una cuenta de prueba y recorrer: hallazgo manual → revisión → oportunidad → checklist de contacto. Confirmar también que Demo y la cuenta personal no ven datos entre sí. **Siguiente paso.**
 5. Configurar en Neon una revisión periódica del uso y de las copias/recuperación disponibles en el plan elegido. Documentar quién conserva acceso a Neon y Render.
-6. Tras la validación con datos sintéticos, revisar el cambio, integrar `dev` en `main` y recién entonces cambiar la rama del servicio a `main`.
+6. Promover cambios mediante un commit en `dev`, validación local y merge/push de `dev` a `main`. Render hará el deploy automático desde `main`; no se configura ningún deploy remoto desde `dev`.
 7. Antes de utilizar datos personales reales: completar exportación/eliminación, auditoría de acciones sensibles, política de privacidad, retención, recuperación probada y revisión legal local. El despliegue técnico no sustituye esos controles.
 
 ## Límites del plan gratuito
@@ -72,13 +73,13 @@ En una instancia local aislada se verificó que el modo SQLite de desarrollo con
 
 El 2026-10-08 se completó la validación externa sin cargar datos personales reales:
 
-- Render compiló y desplegó el commit `bd6457b` de la rama `dev`.
+- Antes de la promoción, Render compiló y desplegó el commit `bd6457b` de la rama `dev` para validar la infraestructura.
 - Neon PostgreSQL se conectó correctamente: el servidor inició, creó el esquema requerido y sembró sólo los ejemplos Demo.
 - Render confirmó el health check configurado en `/api/health`.
 - `https://agente-inmobiliario-dev.onrender.com/api/health` respondió `{"status":"ok"}`.
 - La raíz pública respondió `200` por HTTPS con CSP, HSTS, bloqueo de frames, `nosniff` y política de referencia restrictiva.
 
-La URL del entorno de validación es <https://agente-inmobiliario-dev.onrender.com>. No se considera producción funcional con datos reales: sigue dedicada a pruebas sintéticas de la rama `dev`.
+La URL pública actual es <https://agente-inmobiliario-dev.onrender.com>. Aunque conserva el sufijo histórico `-dev`, Render despliega desde `main`; no se considera todavía una producción habilitada para datos reales. Un dominio propio y un eventual cambio de nombre/URL se realizarán como una migración explícita para no interrumpir accesos.
 
 ## Fuentes operativas
 

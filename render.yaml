@@ -1,6 +1,9 @@
 services:
   - type: web
+    # La producción se promueve únicamente desde main. La instancia existente
+    # conserva de momento su nombre/URL histórica para no interrumpir accesos.
     name: agente-inmobiliario-dev
+    branch: main
     runtime: node
     plan: free
     rootDir: web

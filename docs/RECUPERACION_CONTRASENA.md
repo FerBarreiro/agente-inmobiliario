@@ -41,7 +41,7 @@ Para activarlo:
 
 1. Crear una cuenta de Resend y verificar un dominio remitente que controle la persona administradora.
 2. Crear una clave con permiso exclusivo de **envío**, restringida a ese dominio cuando el panel lo permita.
-3. En **Render → agente-inmobiliario-dev → Environment**, crear los secretos:
+3. En **Render → agente-inmobiliario-dev → Environment**, crear los secretos. Ese servicio despliega desde `main` aunque conserva su nombre histórico:
    - `RESEND_API_KEY`: la clave de envío de Resend;
    - `EMAIL_FROM`: por ejemplo, `Agente+ <acceso@tu-dominio-verificado.com>`.
 4. Guardar y desplegar. No pegar esas variables en Git, archivos `.env` versionados, capturas ni chats.

@@ -1,7 +1,7 @@
 # Estado actual y hoja de ruta
 
 **Fecha de corte:** 2026-10-08  
-**Estado del producto:** prototipo funcional desplegado en un entorno de validación Render + Neon; prueba funcional sintética pendiente.
+**Estado del producto:** prototipo funcional desplegado desde `main` en Render + Neon; prueba funcional sintética pendiente.
 **Fuente canónica:** este documento determina qué está operativo y qué sigue siendo diseño.
 
 ## Objetivo vigente
@@ -39,7 +39,7 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Zonaprop/Argenprop | Sin integración | Accesos manuales desde Radar; acuerdo de metadatos sólo como etapa futura. |
 | Mensajería/redes | Sin integración | Registro manual; ningún envío o lectura automática. |
 | Exportación/eliminación | No implementada | Requisito previo al piloto con datos reales. |
-| Producción segura | Validación externa activa | Render + Neon conectados sobre `dev`, PostgreSQL, HTTPS, health check, cabeceras y límites de intentos verificados. Faltan pruebas funcionales sintéticas, backups/recuperación, operación y controles previos a datos reales. |
+| Producción segura | Infraestructura activa | Render despliega `main` contra Neon con PostgreSQL, HTTPS, health check, cabeceras y límites de intentos verificados. `dev` se usa localmente. Faltan pruebas funcionales sintéticas, backups/recuperación, operación y controles previos a datos reales. |
 
 ## Arquitectura actual
 

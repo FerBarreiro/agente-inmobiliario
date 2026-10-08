@@ -5,7 +5,7 @@
 
 ## Alcance de este incremento
 
-Se preparó Agente+ para un staging protegido y para evitar configuraciones de producción inseguras por accidente. El 2026-10-08 se creó un entorno de validación en Render conectado a Neon, sobre la rama `dev`, sin datos personales reales.
+Se preparó Agente+ para evitar configuraciones de producción inseguras por accidente. El 2026-10-08 se creó un servicio Render conectado a Neon que despliega exclusivamente desde `main`; `dev` se usa sólo para desarrollo local. No contiene datos personales reales.
 
 La aplicación usa SQLite en desarrollo local y PostgreSQL cuando se provee `DATABASE_URL`. La ruta acordada para el piloto es Render + Neon; su configuración está en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md). Un staging técnico con SQLite local sigue siendo posible con confirmación explícita, pero no está aprobado para datos personales reales.
 
@@ -67,7 +67,7 @@ El 2026-10-08 se ejecutó una instancia temporal con configuración de producci�
 4. HSTS, bloqueo de frames y política de referencia estuvieron presentes en la respuesta;
 5. compilación de producción, lint y validación de sintaxis del servidor.
 
-También se verificó el despliegue externo de validación: compilación en Render, conexión a Neon, arranque del servidor, health check `/api/health` con respuesta `200` y cabeceras HTTPS de la raíz pública. El detalle está en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md).
+También se verificó la infraestructura externa: compilación en Render, conexión a Neon, arranque del servidor, health check `/api/health` con respuesta `200` y cabeceras HTTPS de la raíz pública. La promoción remota ocurre exclusivamente desde `main`; el detalle está en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md).
 
 ## Próxima acción necesaria
 
