@@ -16,6 +16,9 @@ if (configuredAppOrigin) {
 }
 if (isProduction && (!appOrigin || !appOrigin.startsWith('https://'))) throw new Error('En producción definí APP_ORIGIN HTTPS o ejecutá en Render con RENDER_EXTERNAL_URL disponible.')
 
+const resendApiKey = String(process.env.RESEND_API_KEY ?? '').trim()
+const emailFrom = String(process.env.EMAIL_FROM ?? '').trim()
+
 const databaseUrl = process.env.DATABASE_URL ?? ''
 const configuredDataDirectory = process.env.DATA_DIRECTORY ?? ''
 if (isProduction && !databaseUrl && !configuredDataDirectory) throw new Error('En producción definí DATABASE_URL para PostgreSQL o DATA_DIRECTORY para un staging técnico.')
@@ -61,6 +64,12 @@ await db.exec(`
     state TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
   );
 `)
 
@@ -111,6 +120,7 @@ await db.exec(`
   CREATE INDEX IF NOT EXISTS tasks_user_index ON tasks(user_id, state, created_at DESC);
   CREATE INDEX IF NOT EXISTS events_opportunity_index ON opportunity_events(opportunity_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS radar_items_user_index ON radar_items(user_id, state, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS password_reset_tokens_user_index ON password_reset_tokens(user_id, expires_at DESC);
 `)
 
 const NEIGHBORHOODS = ['Núñez', 'Saavedra', 'Villa Urquiza', 'Coghlan', 'Belgrano']
@@ -160,6 +170,11 @@ const deleteSession = db.prepare('DELETE FROM sessions WHERE token_hash = ?')
 const deleteUserSessions = db.prepare('DELETE FROM sessions WHERE user_id = ?')
 const getSessionUser = db.prepare('SELECT u.id, u.email, u.display_name, u.role, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
 const deleteExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?')
+const getPasswordResetToken = db.prepare('SELECT token_hash, user_id AS "userId", expires_at AS "expiresAt" FROM password_reset_tokens WHERE token_hash = ?')
+const insertPasswordResetToken = db.prepare('INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
+const deletePasswordResetToken = db.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?')
+const deletePasswordResetTokensForUser = db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?')
+const deleteExpiredPasswordResetTokens = db.prepare('DELETE FROM password_reset_tokens WHERE expires_at <= ?')
 const opportunityFields = `
   id, name, neighborhood, operation, status, reason, score,
   next_step AS "nextStep", property_type AS "propertyType", source, source_url AS "sourceUrl",
@@ -302,8 +317,8 @@ function requesterAddress(request) {
   return forwarded || request.socket.remoteAddress || 'unknown'
 }
 
-function allowRate(request, response, bucket, maximum, windowMs) {
-  const key = `${bucket}:${requesterAddress(request)}`
+function allowRateKey(response, bucket, subject, maximum, windowMs) {
+  const key = `${bucket}:${subject}`
   const currentTime = Date.now()
   const current = rateWindows.get(key)
   const record = !current || current.resetAt <= currentTime ? { count: 0, resetAt: currentTime + windowMs } : current
@@ -318,11 +333,22 @@ function allowRate(request, response, bucket, maximum, windowMs) {
   return false
 }
 
+function allowRate(request, response, bucket, maximum, windowMs) {
+  return allowRateKey(response, bucket, requesterAddress(request), maximum, windowMs)
+}
+
 function allowMutationFromOrigin(request, response) {
   if (!isProduction || ['GET', 'HEAD', 'OPTIONS'].includes(request.method ?? 'GET')) return true
   if (request.headers.origin === appOrigin) return true
   sendJson(response, 403, { error: 'La solicitud no proviene del origen autorizado.' })
   return false
+}
+
+class ClientError extends Error {
+  constructor(status, message) {
+    super(message)
+    this.status = status
+  }
 }
 
 async function readBody(request) {
@@ -374,6 +400,48 @@ async function createSession(response, user) {
   return { 'Set-Cookie': sessionCookie(token) }
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
+}
+
+function passwordResetUrl(token) {
+  if (!appOrigin) return ''
+  const url = new URL(appOrigin)
+  url.searchParams.set('reset', token)
+  return url.toString()
+}
+
+function canSendPasswordResetEmail() {
+  return Boolean(resendApiKey && emailFrom && !/[\r\n]/.test(emailFrom) && passwordResetUrl('test'))
+}
+
+async function sendPasswordResetEmail({ email, displayName, token }) {
+  if (!canSendPasswordResetEmail()) return false
+  const resetUrl = passwordResetUrl(token)
+  const safeName = escapeHtml(displayName)
+  const safeUrl = escapeHtml(resetUrl)
+  try {
+    const result = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: emailFrom,
+        to: [email],
+        subject: 'Restablecé tu contraseña de Agente+',
+        text: `Hola ${displayName},\n\nPara crear una nueva contraseña, abrí este enlace dentro de los próximos 30 minutos:\n${resetUrl}\n\nSi no solicitaste este cambio, podés ignorar este correo.`,
+        html: `<p>Hola ${safeName},</p><p>Para crear una nueva contraseña, abrí este enlace dentro de los próximos 30 minutos:</p><p><a href="${safeUrl}">Restablecer contraseña</a></p><p>Si no solicitaste este cambio, podés ignorar este correo.</p>`,
+        tags: [{ name: 'category', value: 'password_reset' }],
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (result.ok) return true
+    console.error(`No se pudo entregar el correo de recuperación (estado ${result.status}).`)
+  } catch {
+    console.error('No se pudo conectar al proveedor de correo para recuperación de contraseña.')
+  }
+  return false
+}
+
 async function serveStatic(request, response, pathname) {
   if (process.env.NODE_ENV !== 'production') return sendJson(response, 404, { error: 'Ruta no encontrada.' })
   const cleanPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '')
@@ -420,6 +488,52 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request)
       const user = await getUserByEmail.get(clean(body.email, 254).toLowerCase())
       if (!user || !(await passwordMatches(String(body.password ?? ''), user))) return sendJson(response, 401, { error: 'Email o contraseña incorrectos.' })
+      return sendJson(response, 200, { user: publicUser(user) }, await createSession(response, user))
+    }
+    if (request.method === 'POST' && url.pathname === '/api/auth/password-reset/request') {
+      if (!allowRate(request, response, 'password-reset', 5, 15 * 60 * 1_000)) return
+      const body = await readBody(request)
+      const email = clean(body.email, 254).toLowerCase()
+      const genericResponse = { message: 'Si existe una cuenta asociada a ese email, recibirás instrucciones para restablecer la contraseña.' }
+      if (!/^\S+@\S+\.\S+$/.test(email)) return sendJson(response, 202, genericResponse)
+      if (!allowRateKey(response, 'password-reset-email', hashToken(email), 3, 60 * 60 * 1_000)) return
+      const user = await getUserByEmail.get(email)
+      if (!user || user.role === 'demo' || !canSendPasswordResetEmail()) return sendJson(response, 202, genericResponse)
+      const token = randomBytes(32).toString('base64url')
+      const tokenHash = hashToken(token)
+      const createdAt = now()
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1_000).toISOString()
+      await withTransaction(async () => {
+        await deleteExpiredPasswordResetTokens.run(createdAt)
+        await deletePasswordResetTokensForUser.run(user.id)
+        await insertPasswordResetToken.run(tokenHash, user.id, expiresAt, createdAt)
+      })
+      if (!(await sendPasswordResetEmail({ email: user.email, displayName: user.display_name, token }))) await deletePasswordResetToken.run(tokenHash)
+      return sendJson(response, 202, genericResponse)
+    }
+    if (request.method === 'POST' && url.pathname === '/api/auth/password-reset/confirm') {
+      if (!allowRate(request, response, 'password-reset-confirm', 8, 15 * 60 * 1_000)) return
+      const body = await readBody(request)
+      const token = String(body.token ?? '')
+      const password = String(body.password ?? '')
+      if (password.length < 12 || password.length > 256) return sendJson(response, 400, { error: 'La nueva contraseña debe tener entre 12 y 256 caracteres.' })
+      if (token.length < 40 || token.length > 200) return sendJson(response, 400, { error: 'El enlace de recuperación no es válido o venció.' })
+      const tokenHash = hashToken(token)
+      const reset = await getPasswordResetToken.get(tokenHash)
+      if (!reset || new Date(reset.expiresAt) <= new Date()) {
+        if (reset) await deletePasswordResetToken.run(tokenHash)
+        return sendJson(response, 400, { error: 'El enlace de recuperación no es válido o venció.' })
+      }
+      const user = await getUserById.get(reset.userId)
+      if (!user || user.role === 'demo') return sendJson(response, 400, { error: 'El enlace de recuperación no es válido o venció.' })
+      const { salt, hash } = await hashPassword(password)
+      await withTransaction(async () => {
+        const activeReset = await getPasswordResetToken.get(tokenHash)
+        if (!activeReset || new Date(activeReset.expiresAt) <= new Date()) throw new ClientError(400, 'El enlace de recuperación no es válido o venció.')
+        await updateUserPassword.run(hash, salt, user.id)
+        await deleteUserSessions.run(user.id)
+        await deletePasswordResetTokensForUser.run(user.id)
+      })
       return sendJson(response, 200, { user: publicUser(user) }, await createSession(response, user))
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
@@ -621,6 +735,7 @@ const server = createServer(async (request, response) => {
     }
     return serveStatic(request, response, url.pathname)
   } catch (error) {
+    if (error instanceof ClientError) return sendJson(response, error.status, { error: error.message })
     console.error(error)
     return sendJson(response, 500, { error: 'No se pudo completar la operación.' })
   }

@@ -18,6 +18,7 @@ La aplicación usa SQLite en desarrollo local y PostgreSQL cuando se provee `DAT
 | Sesión | Cookie `HttpOnly`, `SameSite=Strict`, `Path=/`, `Priority=High`; el servidor guarda sólo el hash del token. |
 | Cabeceras | CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, política de referencia y permisos restringidos. |
 | Intentos de acceso | Registro e inicio de sesión: máximo 8 intentos por dirección en 15 minutos; demo: 20 en el mismo período. |
+| Recuperación de contraseña | Enlace hashado de un uso, vencimiento de 30 minutos, límites de solicitud y revocación de sesiones al completar el cambio. El correo requiere proveedor transaccional configurado. |
 | Entrada y transporte | Cuerpos JSON limitados, contraseñas entre 12 y 256 caracteres y timeouts del servidor. |
 | Base administrada | Con `DATABASE_URL`, la API usa PostgreSQL; la URL se mantiene como secreto y la conexión exige TLS fuera de localhost. |
 | Datos de SQLite | Si no existe `DATABASE_URL`, en producción se exige `DATA_DIRECTORY` absoluto y confirmación explícita `ALLOW_LOCAL_SQLITE_IN_PRODUCTION=1`; sólo habilita staging técnico. |
@@ -38,8 +39,10 @@ El archivo [`web/.env.example`](../web/.env.example) es una plantilla sin secret
 | `ALLOW_LOCAL_SQLITE_IN_PRODUCTION` | Sólo staging técnico | Reconoce explícitamente que SQLite local no habilita datos personales. |
 | `HOST`, `PORT` | Según proveedor | Interfaz de escucha del servicio. |
 | `TRUST_PROXY` | Sólo detrás de proxy confiable | Permite identificar el origen para rate limiting. |
+| `RESEND_API_KEY` | Necesaria para activar recuperación | Secreto de envío limitado al dominio remitente. |
+| `EMAIL_FROM` | Necesaria para activar recuperación | Remitente con dominio verificado, por ejemplo `Agente+ <acceso@dominio>`. |
 
-Los archivos `.env` y sus variantes están excluidos de Git. Nunca se deben escribir contraseñas, tokens, claves de proveedores ni copias de base de datos en el repositorio.
+Los archivos `.env` y sus variantes están excluidos de Git. Nunca se deben escribir contraseñas, tokens, claves de proveedores ni copias de base de datos en el repositorio. La activación, las pruebas y los límites de la recuperación están en [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md).
 
 ## Condición para datos reales
 
@@ -68,4 +71,4 @@ También se verificó el despliegue externo de validación: compilación en Rend
 
 ## Próxima acción necesaria
 
-Crear Neon y Render, cargar la cadena de Neon directamente como secreto de Render y verificar el despliegue sin datos personales. Los pasos exactos, responsabilidades y límites del plan gratuito están en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md).
+Completar la prueba funcional sintética del flujo completo, incluyendo aislamiento entre Demo/cuenta personal. Si se desea habilitar recuperación por correo, configurar el proveedor y el remitente verificado según [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md), y probar la entrega sin usar datos de terceros. Los controles de backup, retención, exportación/eliminación y revisión legal siguen siendo requisitos previos a datos personales reales.

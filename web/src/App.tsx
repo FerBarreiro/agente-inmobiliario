@@ -128,6 +128,7 @@ function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
+  const resetToken = new URLSearchParams(window.location.search).get('reset') ?? ''
 
   const loadDashboard = async () => setDashboard(await api<Dashboard>('/api/dashboard'))
 
@@ -139,12 +140,13 @@ function App() {
   }, [])
 
   if (loading) return <div className="loading-screen">Cargando Agente<span>+</span>…</div>
-  if (!dashboard) return <AuthScreen onAuthenticated={async () => { await loadDashboard(); setNotice('Sesión iniciada correctamente.') }} />
+  if (resetToken || !dashboard) return <AuthScreen resetToken={resetToken} onAuthenticated={async (message = 'Sesión iniciada correctamente.') => { await loadDashboard(); setNotice(message) }} />
   return <DashboardScreen dashboard={dashboard} setDashboard={setDashboard} notice={notice} setNotice={setNotice} onLogout={() => { setDashboard(null); setNotice('') }} />
 }
 
-function AuthScreen({ onAuthenticated }: { onAuthenticated: () => Promise<void> }) {
+function AuthScreen({ onAuthenticated, resetToken }: { onAuthenticated: (message?: string) => Promise<void>; resetToken: string }) {
   const [mode, setMode] = useState<AuthMode>('login')
+  const [recoveryMode, setRecoveryMode] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -164,6 +166,8 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: () => Promise<void> 
     setBusy(true)
     try { await api('/api/auth/demo', { method: 'POST' }); await onAuthenticated() } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo abrir la demo.') } finally { setBusy(false) }
   }
+  if (resetToken) return <PasswordResetScreen token={resetToken} onAuthenticated={onAuthenticated} />
+  if (recoveryMode) return <PasswordRecoveryScreen onBack={() => setRecoveryMode(false)} />
   return <main className="auth-shell">
     <section className="auth-brand">
       <Brand />
@@ -182,11 +186,47 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: () => Promise<void> 
           <label>Contraseña<input name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={12} required />{mode === 'register' && <small>Al menos 12 caracteres.</small>}</label>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary-button auth-submit" disabled={busy} type="submit">{busy ? 'Procesando…' : mode === 'login' ? 'Ingresar' : 'Crear cuenta privada'}</button>
+          {mode === 'login' && <button className="auth-link" type="button" onClick={() => { setError(''); setRecoveryMode(true) }}>Olvidé mi contraseña</button>}
         </form>
       </div>
       <p className="auth-footnote">La demo está aislada de tu cuenta. Tus datos no se comparten entre usuarios.</p>
     </section>
   </main>
+}
+
+function PasswordRecoveryScreen({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setBusy(true)
+    try { await api('/api/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) }); setSubmitted(true) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo iniciar la recuperación.') } finally { setBusy(false) }
+  }
+  return <main className="auth-shell"><section className="auth-brand"><Brand /><div><p className="eyebrow light">RECUPERACIÓN DE ACCESO</p><h1>Volvé a entrar de forma segura.</h1><p>El enlace es de un solo uso, vence en 30 minutos y nunca se muestra dentro de la aplicación.</p></div><ul><li>Sin revelar si un email existe</li><li>Contraseña nueva de 12 caracteres</li><li>Sesiones anteriores invalidadas</li></ul></section><section className="auth-panel"><div className="auth-card"><p className="eyebrow">RECUPERAR ACCESO</p><h2>Olvidé mi contraseña</h2><p className="auth-description">Ingresá el email con el que creaste tu cuenta. Si existe y el correo está configurado, recibirás un enlace de recuperación.</p>{submitted ? <><p className="recovery-notice" role="status">Si existe una cuenta asociada y el correo de recuperación está configurado, se enviarán las instrucciones. Revisá también la carpeta de spam.</p><button className="secondary-button" type="button" onClick={onBack}>Volver a ingresar</button></> : <form className="auth-form" onSubmit={submit}><label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required autoFocus /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={busy} type="submit">{busy ? 'Enviando…' : 'Enviar enlace de recuperación'}</button><button className="auth-link" type="button" onClick={onBack}>Volver a ingresar</button></form>}</div><p className="auth-footnote">La recuperación no comparte datos de tu cuenta ni revela si el email está registrado.</p></section></main>
+}
+
+function PasswordResetScreen({ token, onAuthenticated }: { token: string; onAuthenticated: (message?: string) => Promise<void> }) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const leaveReset = () => window.location.assign(window.location.pathname)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    const data = new FormData(event.currentTarget)
+    const password = String(data.get('password') ?? '')
+    const confirmation = String(data.get('confirmation') ?? '')
+    if (password !== confirmation) { setError('La confirmación no coincide con la nueva contraseña.'); return }
+    setBusy(true)
+    try {
+      await api('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) })
+      window.history.replaceState({}, '', window.location.pathname)
+      await onAuthenticated('Contraseña restablecida. Las demás sesiones se cerraron por seguridad.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo restablecer la contraseña.') } finally { setBusy(false) }
+  }
+  return <main className="auth-shell"><section className="auth-brand"><Brand /><div><p className="eyebrow light">RECUPERACIÓN DE ACCESO</p><h1>Creá una contraseña nueva.</h1><p>Al confirmarla, todas las otras sesiones de esta cuenta se cerrarán.</p></div><ul><li>Enlace de un solo uso</li><li>Vencimiento de 30 minutos</li><li>Sesión segura al finalizar</li></ul></section><section className="auth-panel"><div className="auth-card"><p className="eyebrow">RESTABLECER CONTRASEÑA</p><h2>Elegí una contraseña nueva</h2><p className="auth-description">Usá al menos 12 caracteres. No reutilices una contraseña de otro servicio.</p><form className="auth-form" onSubmit={submit}><label>Nueva contraseña<input name="password" type="password" autoComplete="new-password" minLength={12} maxLength={256} required autoFocus /><small>Entre 12 y 256 caracteres.</small></label><label>Confirmar contraseña<input name="confirmation" type="password" autoComplete="new-password" minLength={12} maxLength={256} required /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={busy} type="submit">{busy ? 'Restableciendo…' : 'Restablecer contraseña'}</button><button className="auth-link" type="button" onClick={leaveReset}>Volver a ingresar</button></form></div><p className="auth-footnote">El enlace no se puede usar más de una vez.</p></section></main>
 }
 
 function Brand() {

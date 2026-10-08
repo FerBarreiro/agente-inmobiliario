@@ -22,6 +22,7 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Cuenta personal | Implementada localmente | Registro con email y contraseña; no aprobada aún para datos reales. |
 | Sesiones | Implementadas | Token aleatorio hashado; cookie HTTP-only, `SameSite=Strict` y `Secure` en producción. |
 | Perfil y cierre de sesión | Implementados | Nombre visible editable, email de acceso de solo lectura, cambio de contraseña con invalidación de otras sesiones y Demo inmutable. |
+| Recuperación de contraseña | Implementada; entrega pendiente | Solicitud genérica, token hashado de un uso y revocación de sesiones. Falta configurar correo transaccional y probar la entrega real. |
 | Vista Hoy | Implementada | Oportunidades, conversaciones, captaciones y próximos pasos. |
 | Alta manual | Implementada | Fuente, enlace, propiedad, permiso, notas, canal, acción y fecha. |
 | Cartera | Implementada | Búsqueda, filtros por estado/barrio y ficha individual. |
@@ -64,6 +65,7 @@ Node.js HTTP server
 ```text
 user
  ├── sessions
+ ├── password_reset_tokens
  ├── radar_items
  ├── opportunities
  │    └── opportunity_events

@@ -20,6 +20,7 @@ Hay dos clases de cuenta:
 - La cookie de sesión es `HttpOnly`; en producción usa `SameSite=Strict`, `Secure` y `Priority=High`.
 - El usuario puede cerrar sesión desde cualquier tamaño de pantalla. La API invalida el token de sesión guardado y vence la cookie del navegador.
 - El perfil permite modificar el nombre visible y cambiar la contraseña, solicitando la contraseña actual. Al cambiarla se invalidan las demás sesiones activas y se crea una nueva para el navegador actual.
+- La recuperación de contraseña usa un enlace temporal de un solo uso; sólo persiste el hash del token. Su entrega por correo requiere configurar el proveedor transaccional descrito en [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md).
 - El email se muestra como identificador de acceso, pero su modificación queda diferida hasta contar con verificación de propiedad del email. La cuenta Demo no permite cambios de perfil ni contraseña.
 - Todas las consultas y actualizaciones de oportunidades/tareas filtran por el usuario autenticado en la API, no en la interfaz.
 - La API de desarrollo escucha únicamente en `127.0.0.1`.
@@ -32,6 +33,7 @@ Hay dos clases de cuenta:
 
 ```text
 users 1 ── N sessions
+users 1 ── N password_reset_tokens
 users 1 ── N opportunities
 users 1 ── N tasks
 opportunities 1 ── N opportunity_events
@@ -47,6 +49,8 @@ El dominio conserva usuarios, sesiones, oportunidades, tareas y eventos comercia
 | `POST /api/auth/logout` | Cierra la sesión actual. | Elimina el hash de token y vence la cookie. |
 | `PUT /api/account/profile` | Actualiza el nombre visible. | Requiere sesión; Demo queda en modo de solo lectura. |
 | `PUT /api/account/password` | Reemplaza la contraseña. | Requiere contraseña actual, 12–256 caracteres e invalida las demás sesiones. |
+| `POST /api/auth/password-reset/request` | Solicita recuperación. | Respuesta genérica, token hashado de 30 minutos y límites por origen/dirección. |
+| `POST /api/auth/password-reset/confirm` | Confirma una contraseña nueva. | Token de un solo uso; invalida sesiones y otros enlaces pendientes. |
 
 No se implementa cambio de email sin comprobación de la nueva dirección. Evita que una sesión comprometida pueda reasignar silenciosamente el acceso de la cuenta.
 

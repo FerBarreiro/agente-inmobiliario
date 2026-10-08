@@ -27,6 +27,7 @@ La aplicación implementa una versión interactiva de la pantalla **Hoy** con au
 - **Demo:** campaña y datos semilla sintéticos, pensados para recorrer el flujo sin afectar el espacio personal;
 - **Mi espacio:** cada usuario crea su cuenta con email y contraseña; sus oportunidades y tareas se guardan aisladas en la base local;
 - perfil de cuenta con nombre editable, email de acceso visible, cambio de contraseña verificado y cierre de sesión disponible en escritorio y móvil;
+- recuperación de contraseña con enlace temporal de un solo uso; requiere configurar el correo transaccional antes de enviar enlaces reales;
 - campaña demo activa para venta y alquiler en los cinco barrios definidos;
 - meta y progreso de captación;
 - acciones priorizadas, que pueden marcarse como completadas;
@@ -40,6 +41,8 @@ La aplicación implementa una versión interactiva de la pantalla **Hoy** con au
 - diseño responsive para escritorio y móvil.
 
 La API local usa SQLite y sesiones HTTP-only; si existe `DATABASE_URL`, utiliza PostgreSQL administrado. No se almacenan contraseñas en texto plano. El servidor aplica controles de producción (origen HTTPS, cabeceras y límites de intentos), pero los datos personales requieren crear y verificar la infraestructura externa antes de operar. La plantilla de configuración es [`.env.example`](.env.example) y las condiciones completas están en [`../docs/PRODUCCION_SEGURA.md`](../docs/PRODUCCION_SEGURA.md).
+
+El flujo de recuperación y la activación de correo están en [`../docs/RECUPERACION_CONTRASENA.md`](../docs/RECUPERACION_CONTRASENA.md). No se habilita un enlace alternativo en pantalla, consola o logs.
 
 ## Documentación funcional
 
