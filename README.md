@@ -15,9 +15,9 @@ Existe un prototipo web local con:
 - radar manual privado: hallazgos, enlace al aviso original, revisión, descarte y conversión deliberada a oportunidad;
 - checklist de contacto para oportunidades de portal y borrador editable que sólo se copia manualmente;
 - restricciones de contacto visibles y aplicadas en el servidor.
-- controles de staging: origen HTTPS autorizado, cabeceras de seguridad, límites de intentos y health check.
+- controles de producción: origen HTTPS autorizado, cabeceras de seguridad, límites de intentos, health check y soporte para PostgreSQL administrado.
 
-La aplicación es apta para desarrollo y validación con datos ficticios. **Todavía no debe utilizarse con datos personales reales**: el código ya endurece un staging con HTTPS, pero faltan base administrada, cifrado en reposo, backups, controles operativos y revisión legal final. Ver [Base de producción segura](docs/PRODUCCION_SEGURA.md).
+La aplicación es apta para desarrollo y validación con datos ficticios. El despliegue con Render + Neon está preparado, pero **todavía no deben cargarse datos personales reales** hasta crear y verificar la infraestructura, recuperación, controles operativos y revisión legal final. Ver [Base de producción segura](docs/PRODUCCION_SEGURA.md) y [Despliegue Render + Neon](docs/DESPLIEGUE_RENDER_NEON.md).
 
 El estado canónico, la hoja de ruta y los límites están en [Estado actual y hoja de ruta](docs/ESTADO_ACTUAL_Y_HOJA_DE_RUTA.md). El índice completo está en [Documentación](docs/README.md).
 
@@ -44,5 +44,5 @@ npm run lint
 
 ```text
 docs/  visión, decisiones, seguridad, incrementos y hoja de ruta
-web/   aplicación React, API Node y base SQLite local
+web/   aplicación React, API Node y capa SQLite/PostgreSQL
 ```

@@ -1,13 +1,13 @@
 # Base de producción segura
 
 **Fecha:** 2026-10-08
-**Estado:** endurecimiento de aplicación implementado; despliegue con datos personales reales aún bloqueado hasta migrar a una base administrada.
+**Estado:** endurecimiento de aplicación y compatibilidad PostgreSQL implementados; falta crear la infraestructura, verificar el primer despliegue y completar los controles operativos antes de cargar datos personales reales.
 
 ## Alcance de este incremento
 
 Se preparó Agente+ para un staging protegido y para evitar configuraciones de producción inseguras por accidente. No se desplegó ningún servidor externo, no se creó una cuenta en un proveedor y no se migraron datos.
 
-La aplicación sigue usando SQLite. Puede utilizarse en desarrollo y, con confirmación explícita, en un staging técnico sin datos personales. No está aprobada para operar datos personales reales en producción hasta completar la migración de almacenamiento.
+La aplicación usa SQLite en desarrollo local y PostgreSQL cuando se provee `DATABASE_URL`. La ruta acordada para el piloto es Render + Neon; su configuración está en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md). Un staging técnico con SQLite local sigue siendo posible con confirmación explícita, pero no está aprobado para datos personales reales.
 
 ## Controles incorporados
 
@@ -19,7 +19,8 @@ La aplicación sigue usando SQLite. Puede utilizarse en desarrollo y, con confir
 | Cabeceras | CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, política de referencia y permisos restringidos. |
 | Intentos de acceso | Registro e inicio de sesión: máximo 8 intentos por dirección en 15 minutos; demo: 20 en el mismo período. |
 | Entrada y transporte | Cuerpos JSON limitados, contraseñas entre 12 y 256 caracteres y timeouts del servidor. |
-| Datos de SQLite | En producción se exige `DATA_DIRECTORY` absoluto y confirmación explícita `ALLOW_LOCAL_SQLITE_IN_PRODUCTION=1`. |
+| Base administrada | Con `DATABASE_URL`, la API usa PostgreSQL; la URL se mantiene como secreto y la conexión exige TLS fuera de localhost. |
+| Datos de SQLite | Si no existe `DATABASE_URL`, en producción se exige `DATA_DIRECTORY` absoluto y confirmación explícita `ALLOW_LOCAL_SQLITE_IN_PRODUCTION=1`; sólo habilita staging técnico. |
 | Estado operativo | `GET /api/health` responde sólo `{ "status": "ok" }`, sin exponer datos de usuarios. |
 
 `TRUST_PROXY=1` sólo debe configurarse si la aplicación queda detrás de un proxy inverso administrado. En ese caso se utiliza el primer valor de `X-Forwarded-For` para los límites de intentos. No debe activarse cuando el servidor sea accesible directamente desde internet.
@@ -31,8 +32,9 @@ El archivo [`web/.env.example`](../web/.env.example) es una plantilla sin secret
 | Variable | Producción | Finalidad |
 |---|---|---|
 | `NODE_ENV` | `production` | Activa precondiciones y cabeceras de producción. |
-| `APP_ORIGIN` | Obligatoria, HTTPS | Origen canónico, por ejemplo `https://app.tu-dominio.com`. |
-| `DATA_DIRECTORY` | Obligatoria | Ruta absoluta de un volumen persistente y restringido. |
+| `APP_ORIGIN` | Dominio propio | Origen canónico HTTPS. En Render se usa `RENDER_EXTERNAL_URL` si se omite. |
+| `DATABASE_URL` | Obligatoria para datos reales | Cadena PostgreSQL con TLS, guardada sólo como secreto del proveedor. |
+| `DATA_DIRECTORY` | Sólo staging SQLite | Ruta absoluta de un volumen persistente y restringido. |
 | `ALLOW_LOCAL_SQLITE_IN_PRODUCTION` | Sólo staging técnico | Reconoce explícitamente que SQLite local no habilita datos personales. |
 | `HOST`, `PORT` | Según proveedor | Interfaz de escucha del servicio. |
 | `TRUST_PROXY` | Sólo detrás de proxy confiable | Permite identificar el origen para rate limiting. |
@@ -43,7 +45,7 @@ Los archivos `.env` y sus variantes están excluidos de Git. Nunca se deben escr
 
 Antes de que un usuario cargue contactos u otra información personal real, se deben completar estos puntos:
 
-1. Elegir un proveedor y migrar las tablas a una base administrada con cifrado en reposo, control de acceso de mínimo privilegio y copias de seguridad verificadas.
+1. Crear y verificar la instancia PostgreSQL administrada, con control de acceso de mínimo privilegio y copias de seguridad/recuperación verificadas.
 2. Configurar el dominio HTTPS, el proxy/hosting, secretos y alertas en el proveedor elegido.
 3. Definir y probar restauración de backups, retención, exportación y eliminación de datos por cuenta.
 4. Mantener auditoría de operaciones sensibles y un procedimiento de incidentes.
@@ -62,6 +64,6 @@ El 2026-10-08 se ejecutó una instancia temporal con configuración de producci�
 4. HSTS, bloqueo de frames y política de referencia estuvieron presentes en la respuesta;
 5. compilación de producción, lint y validación de sintaxis del servidor.
 
-## Próxima decisión necesaria
+## Próxima acción necesaria
 
-Para continuar hacia datos reales falta elegir el proveedor de despliegue y la base administrada. Esa decisión determina la migración de SQLite a PostgreSQL (u otra alternativa administrada), el modelo de backups y la configuración de secretos. Hasta entonces, el alcance seguro es desarrollo local y staging sin información personal real.
+Crear Neon y Render, cargar la cadena de Neon directamente como secreto de Render y verificar el despliegue sin datos personales. Los pasos exactos, responsabilidades y límites del plan gratuito están en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md).

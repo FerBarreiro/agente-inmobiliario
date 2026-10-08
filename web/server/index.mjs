@@ -4,29 +4,29 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { extname, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { DatabaseSync } from 'node:sqlite'
+import { createDatabase } from './database.mjs'
 
 const scrypt = promisify(scryptCallback)
 const root = process.cwd()
 const isProduction = process.env.NODE_ENV === 'production'
-const configuredAppOrigin = process.env.APP_ORIGIN ?? ''
+const configuredAppOrigin = process.env.APP_ORIGIN ?? (isProduction ? process.env.RENDER_EXTERNAL_URL ?? '' : '')
 let appOrigin = ''
 if (configuredAppOrigin) {
   try { appOrigin = new URL(configuredAppOrigin).origin } catch { throw new Error('APP_ORIGIN debe ser una URL absoluta válida.') }
 }
-if (isProduction && (!appOrigin || !appOrigin.startsWith('https://'))) throw new Error('En producción APP_ORIGIN debe usar HTTPS, por ejemplo https://app.ejemplo.com.')
+if (isProduction && (!appOrigin || !appOrigin.startsWith('https://'))) throw new Error('En producción definí APP_ORIGIN HTTPS o ejecutá en Render con RENDER_EXTERNAL_URL disponible.')
 
+const databaseUrl = process.env.DATABASE_URL ?? ''
 const configuredDataDirectory = process.env.DATA_DIRECTORY ?? ''
-if (isProduction && !configuredDataDirectory) throw new Error('En producción definí DATA_DIRECTORY en un volumen persistente y restringido.')
-if (isProduction && !isAbsolute(configuredDataDirectory)) throw new Error('DATA_DIRECTORY debe ser una ruta absoluta en producción.')
-if (isProduction && process.env.ALLOW_LOCAL_SQLITE_IN_PRODUCTION !== '1') throw new Error('SQLite local no está aprobado para datos personales. Para un staging sin datos reales, confirmá ALLOW_LOCAL_SQLITE_IN_PRODUCTION=1.')
+if (isProduction && !databaseUrl && !configuredDataDirectory) throw new Error('En producción definí DATABASE_URL para PostgreSQL o DATA_DIRECTORY para un staging técnico.')
+if (isProduction && !databaseUrl && !isAbsolute(configuredDataDirectory)) throw new Error('DATA_DIRECTORY debe ser una ruta absoluta en producción.')
+if (isProduction && !databaseUrl && process.env.ALLOW_LOCAL_SQLITE_IN_PRODUCTION !== '1') throw new Error('SQLite local no está aprobado para datos personales. Para un staging sin datos reales, confirmá ALLOW_LOCAL_SQLITE_IN_PRODUCTION=1.')
 const dataDirectory = configuredDataDirectory ? resolve(configuredDataDirectory) : join(root, 'data')
-mkdirSync(dataDirectory, { recursive: true })
+if (!databaseUrl) mkdirSync(dataDirectory, { recursive: true })
 
-const db = new DatabaseSync(join(dataDirectory, 'agente.sqlite'))
-db.exec(`
-  PRAGMA foreign_keys = ON;
-  PRAGMA journal_mode = WAL;
+const db = createDatabase({ databaseUrl, sqliteFilename: join(dataDirectory, 'agente.sqlite') })
+if (db.dialect === 'sqlite') await db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;')
+await db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,
     password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL,
@@ -64,34 +64,38 @@ db.exec(`
   );
 `)
 
-function ensureColumn(table, column, definition) {
-  const exists = db.prepare(`PRAGMA table_info(${table})`).all().some((item) => item.name === column)
-  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+async function ensureColumn(table, column, definition) {
+  if (db.dialect === 'postgres') {
+    await db.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${definition}`)
+    return
+  }
+  const exists = (await db.prepare(`PRAGMA table_info(${table})`).all()).some((item) => item.name === column)
+  if (!exists) await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }
 
-ensureColumn('opportunities', 'property_type', "TEXT NOT NULL DEFAULT 'Departamento'")
-ensureColumn('opportunities', 'source', "TEXT NOT NULL DEFAULT 'Carga manual'")
-ensureColumn('opportunities', 'source_url', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'contact_detail', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'contact_permission', "TEXT NOT NULL DEFAULT 'unknown'")
-ensureColumn('opportunities', 'notes', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'next_step_date', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'updated_at', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'closed_at', 'TEXT')
-ensureColumn('opportunities', 'external_source', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'external_id', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'contact_source_reviewed', 'INTEGER NOT NULL DEFAULT 0')
-ensureColumn('opportunities', 'contact_listing_policy', "TEXT NOT NULL DEFAULT 'not_started'")
-ensureColumn('opportunities', 'no_llame_checked_at', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'planned_contact_channel', "TEXT NOT NULL DEFAULT 'Sin canal'")
-ensureColumn('opportunities', 'contact_draft', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'contact_preparation_notes', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('opportunities', 'contact_preparation_status', "TEXT NOT NULL DEFAULT 'not_started'")
-ensureColumn('opportunities', 'contact_preparation_updated_at', "TEXT NOT NULL DEFAULT ''")
-ensureColumn('tasks', 'opportunity_id', 'TEXT')
-ensureColumn('tasks', 'due_at', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'property_type', "TEXT NOT NULL DEFAULT 'Departamento'")
+await ensureColumn('opportunities', 'source', "TEXT NOT NULL DEFAULT 'Carga manual'")
+await ensureColumn('opportunities', 'source_url', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_detail', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_permission', "TEXT NOT NULL DEFAULT 'unknown'")
+await ensureColumn('opportunities', 'notes', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'next_step_date', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'updated_at', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'closed_at', 'TEXT')
+await ensureColumn('opportunities', 'external_source', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'external_id', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_source_reviewed', 'INTEGER NOT NULL DEFAULT 0')
+await ensureColumn('opportunities', 'contact_listing_policy', "TEXT NOT NULL DEFAULT 'not_started'")
+await ensureColumn('opportunities', 'no_llame_checked_at', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'planned_contact_channel', "TEXT NOT NULL DEFAULT 'Sin canal'")
+await ensureColumn('opportunities', 'contact_draft', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_preparation_notes', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_preparation_status', "TEXT NOT NULL DEFAULT 'not_started'")
+await ensureColumn('opportunities', 'contact_preparation_updated_at', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('tasks', 'opportunity_id', 'TEXT')
+await ensureColumn('tasks', 'due_at', "TEXT NOT NULL DEFAULT ''")
 
-db.exec(`
+await db.exec(`
   CREATE TABLE IF NOT EXISTS opportunity_events (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -144,10 +148,7 @@ function preparationStatus({ sourceReviewed, listingPolicy, channel, noLlameChec
   if (['WhatsApp', 'Llamada'].includes(channel) && !validLocalDate(noLlameCheckedAt)) return 'pending'
   return 'ready'
 }
-const withTransaction = (operation) => {
-  db.exec('BEGIN')
-  try { const result = operation(); db.exec('COMMIT'); return result } catch (error) { db.exec('ROLLBACK'); throw error }
-}
+const withTransaction = async (operation) => db.transaction(operation)
 
 const getUserByEmail = db.prepare('SELECT * FROM users WHERE email = ?')
 const getUserById = db.prepare('SELECT id, email, display_name, role FROM users WHERE id = ?')
@@ -158,25 +159,25 @@ const getSessionUser = db.prepare('SELECT u.id, u.email, u.display_name, u.role,
 const deleteExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?')
 const opportunityFields = `
   id, name, neighborhood, operation, status, reason, score,
-  next_step AS nextStep, property_type AS propertyType, source, source_url AS sourceUrl,
-  contact_detail AS contactDetail, contact_permission AS contactPermission, notes,
-  next_step_date AS nextStepDate, created_at AS createdAt, updated_at AS updatedAt,
-  closed_at AS closedAt, external_source AS externalSource, external_id AS externalId,
-  contact_source_reviewed AS contactSourceReviewed, contact_listing_policy AS contactListingPolicy,
-  no_llame_checked_at AS noLlameCheckedAt, planned_contact_channel AS plannedContactChannel,
-  contact_draft AS contactDraft, contact_preparation_notes AS contactPreparationNotes,
-  contact_preparation_status AS contactPreparationStatus,
-  contact_preparation_updated_at AS contactPreparationUpdatedAt
+  next_step AS "nextStep", property_type AS "propertyType", source, source_url AS "sourceUrl",
+  contact_detail AS "contactDetail", contact_permission AS "contactPermission", notes,
+  next_step_date AS "nextStepDate", created_at AS "createdAt", updated_at AS "updatedAt",
+  closed_at AS "closedAt", external_source AS "externalSource", external_id AS "externalId",
+  contact_source_reviewed AS "contactSourceReviewed", contact_listing_policy AS "contactListingPolicy",
+  no_llame_checked_at AS "noLlameCheckedAt", planned_contact_channel AS "plannedContactChannel",
+  contact_draft AS "contactDraft", contact_preparation_notes AS "contactPreparationNotes",
+  contact_preparation_status AS "contactPreparationStatus",
+  contact_preparation_updated_at AS "contactPreparationUpdatedAt"
 `
 const listOpportunities = db.prepare(`SELECT ${opportunityFields} FROM opportunities WHERE user_id = ? ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC`)
 const getOpportunity = db.prepare(`SELECT ${opportunityFields} FROM opportunities WHERE id = ? AND user_id = ?`)
-const listTasks = db.prepare("SELECT id, opportunity_id AS opportunityId, title, contact, due, due_at AS dueAt, channel, state, priority FROM tasks WHERE user_id = ? ORDER BY state ASC, COALESCE(NULLIF(due_at, ''), created_at) ASC")
-const listEvents = db.prepare('SELECT id, opportunity_id AS opportunityId, event_type AS eventType, label, notes, channel, created_at AS createdAt FROM opportunity_events WHERE user_id = ? ORDER BY created_at DESC')
+const listTasks = db.prepare('SELECT id, opportunity_id AS "opportunityId", title, contact, due, due_at AS "dueAt", channel, state, priority FROM tasks WHERE user_id = ? ORDER BY state ASC, COALESCE(NULLIF(due_at, \'\'), created_at) ASC')
+const listEvents = db.prepare('SELECT id, opportunity_id AS "opportunityId", event_type AS "eventType", label, notes, channel, created_at AS "createdAt" FROM opportunity_events WHERE user_id = ? ORDER BY created_at DESC')
 const getOpportunityByExternal = db.prepare('SELECT id FROM opportunities WHERE user_id = ? AND external_source = ? AND external_id = ?')
 const radarItemFields = `
-  id, title, neighborhood, operation, property_type AS propertyType, source,
-  source_url AS sourceUrl, price_amount AS priceAmount, currency, notes, state,
-  created_at AS createdAt, updated_at AS updatedAt
+  id, title, neighborhood, operation, property_type AS "propertyType", source,
+  source_url AS "sourceUrl", price_amount AS "priceAmount", currency, notes, state,
+  created_at AS "createdAt", updated_at AS "updatedAt"
 `
 const listRadarItems = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE user_id = ? ORDER BY updated_at DESC`)
 const getRadarItem = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE id = ? AND user_id = ?`)
@@ -220,23 +221,23 @@ async function passwordMatches(password, user) {
 async function createUser({ email, displayName, password, role = 'agent' }) {
   const { salt, hash } = await hashPassword(password)
   const id = randomUUID()
-  insertUser.run(id, email, displayName, hash, salt, role, now())
-  return getUserById.get(id)
+  await insertUser.run(id, email, displayName, hash, salt, role, now())
+  return await getUserById.get(id)
 }
 
-function addEvent(userId, opportunityId, eventType, label, notes = '', channel = 'Sin canal', createdAt = now()) {
-  insertEvent.run(randomUUID(), userId, opportunityId, eventType, label, notes, channel, createdAt)
+async function addEvent(userId, opportunityId, eventType, label, notes = '', channel = 'Sin canal', createdAt = now()) {
+  await insertEvent.run(randomUUID(), userId, opportunityId, eventType, label, notes, channel, createdAt)
 }
 
-function addTask(userId, opportunityId, title, contact, dueAt, channel, priority = 'Media') {
+async function addTask(userId, opportunityId, title, contact, dueAt, channel, priority = 'Media') {
   const due = dueAt || 'Sin fecha'
-  insertTask.run(randomUUID(), userId, title, contact, due, channel, 'pending', priority, now(), opportunityId, dueAt)
+  await insertTask.run(randomUUID(), userId, title, contact, due, channel, 'pending', priority, now(), opportunityId, dueAt)
 }
 
 async function seedDemo() {
-  let user = getUserByEmail.get('demo@agente.local')
+  let user = await getUserByEmail.get('demo@agente.local')
   if (!user) user = await createUser({ email: 'demo@agente.local', displayName: 'Florencia M.', password: randomBytes(32).toString('hex'), role: 'demo' })
-  const existing = listOpportunities.all(user.id)
+  const existing = await listOpportunities.all(user.id)
   if (existing.length) return
 
   const examples = [
@@ -248,19 +249,19 @@ async function seedDemo() {
   for (const example of examples) {
     const opportunityId = randomUUID()
     const createdAt = now()
-    insertOpportunity.run(opportunityId, user.id, example.name, example.neighborhood, example.operation, example.status, example.reason, example.score, example.nextStep, createdAt, example.propertyType, example.source, '', '', example.permission, 'Dato sintético para recorrer el flujo.', '', createdAt, null, '', '')
-    addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad detectada', 'Registro sintético de demostración.', 'Sin canal', createdAt)
-    addTask(user.id, opportunityId, example.nextStep, example.name, '', example.channel, example.score > 85 ? 'Alta' : 'Media')
+    await insertOpportunity.run(opportunityId, user.id, example.name, example.neighborhood, example.operation, example.status, example.reason, example.score, example.nextStep, createdAt, example.propertyType, example.source, '', '', example.permission, 'Dato sintético para recorrer el flujo.', '', createdAt, null, '', '')
+    await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad detectada', 'Registro sintético de demostración.', 'Sin canal', createdAt)
+    await addTask(user.id, opportunityId, example.nextStep, example.name, '', example.channel, example.score > 85 ? 'Alta' : 'Media')
   }
 }
 
-function backfillDetectedEvents() {
-  const missing = db.prepare(`
-    SELECT o.id, o.user_id AS userId, o.created_at AS createdAt
+async function backfillDetectedEvents() {
+  const missing = await db.prepare(`
+    SELECT o.id, o.user_id AS "userId", o.created_at AS "createdAt"
     FROM opportunities o
     WHERE NOT EXISTS (SELECT 1 FROM opportunity_events e WHERE e.opportunity_id = o.id)
   `).all()
-  for (const item of missing) addEvent(item.userId, item.id, 'opportunity_detected', 'Oportunidad detectada', 'Evento inicial incorporado al historial.', 'Sin canal', item.createdAt)
+  for (const item of missing) await addEvent(item.userId, item.id, 'opportunity_detected', 'Oportunidad detectada', 'Evento inicial incorporado al historial.', 'Sin canal', item.createdAt)
 }
 
 function parseCookies(header = '') {
@@ -336,37 +337,37 @@ function publicUser(user) {
   return { id: user.id, name: user.display_name, email: user.email, isDemo: user.role === 'demo' }
 }
 
-function userFor(request) {
+async function userFor(request) {
   const token = parseCookies(request.headers.cookie).session
   if (!token) return null
-  const user = getSessionUser.get(hashToken(token))
+  const user = await getSessionUser.get(hashToken(token))
   if (!user || new Date(user.expires_at) <= new Date()) return null
   return user
 }
 
-function requireUser(request, response) {
-  const user = userFor(request)
+async function requireUser(request, response) {
+  const user = await userFor(request)
   if (!user) { sendJson(response, 401, { error: 'Sesión requerida.' }); return null }
   return user
 }
 
-function dashboard(user) {
-  const events = listEvents.all(user.id)
+async function dashboard(user) {
+  const events = await listEvents.all(user.id)
   const byOpportunity = new Map()
   for (const event of events) {
     const current = byOpportunity.get(event.opportunityId) ?? []
     current.push(event)
     byOpportunity.set(event.opportunityId, current)
   }
-  const opportunities = listOpportunities.all(user.id).map((opportunity) => ({ ...opportunity, events: byOpportunity.get(opportunity.id) ?? [] }))
-  return { user: publicUser(user), opportunities, tasks: listTasks.all(user.id) }
+  const opportunities = (await listOpportunities.all(user.id)).map((opportunity) => ({ ...opportunity, events: byOpportunity.get(opportunity.id) ?? [] }))
+  return { user: publicUser(user), opportunities, tasks: await listTasks.all(user.id) }
 }
 
 async function createSession(response, user) {
   const token = randomBytes(32).toString('base64url')
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-  deleteExpiredSessions.run(now())
-  insertSession.run(hashToken(token), user.id, expires, now())
+  await deleteExpiredSessions.run(now())
+  await insertSession.run(hashToken(token), user.id, expires, now())
   return { 'Set-Cookie': sessionCookie(token) }
 }
 
@@ -384,7 +385,7 @@ async function serveStatic(request, response, pathname) {
 }
 
 await seedDemo()
-backfillDetectedEvents()
+await backfillDetectedEvents()
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host}`)
@@ -392,12 +393,12 @@ const server = createServer(async (request, response) => {
     if (!allowMutationFromOrigin(request, response)) return
     if (request.method === 'GET' && url.pathname === '/api/health') return sendJson(response, 200, { status: 'ok' })
     if (request.method === 'GET' && url.pathname === '/api/auth/me') {
-      const user = userFor(request)
+      const user = await userFor(request)
       return sendJson(response, 200, { user: user ? publicUser(user) : null })
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/demo') {
       if (!allowRate(request, response, 'demo', 20, 15 * 60 * 1_000)) return
-      const user = getUserByEmail.get('demo@agente.local')
+      const user = await getUserByEmail.get('demo@agente.local')
       return sendJson(response, 200, { user: publicUser(user) }, await createSession(response, user))
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/register') {
@@ -407,32 +408,32 @@ const server = createServer(async (request, response) => {
       const displayName = clean(body.name, 80)
       const password = String(body.password ?? '')
       if (!/^\S+@\S+\.\S+$/.test(email) || displayName.length < 2 || password.length < 12 || password.length > 256) return sendJson(response, 400, { error: 'Ingresá nombre, email válido y una contraseña de entre 12 y 256 caracteres.' })
-      if (getUserByEmail.get(email)) return sendJson(response, 409, { error: 'Ya existe una cuenta con ese email.' })
+      if (await getUserByEmail.get(email)) return sendJson(response, 409, { error: 'Ya existe una cuenta con ese email.' })
       const user = await createUser({ email, displayName, password })
       return sendJson(response, 201, { user: publicUser(user) }, await createSession(response, user))
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/login') {
       if (!allowRate(request, response, 'credentials', 8, 15 * 60 * 1_000)) return
       const body = await readBody(request)
-      const user = getUserByEmail.get(clean(body.email, 254).toLowerCase())
+      const user = await getUserByEmail.get(clean(body.email, 254).toLowerCase())
       if (!user || !(await passwordMatches(String(body.password ?? ''), user))) return sendJson(response, 401, { error: 'Email o contraseña incorrectos.' })
       return sendJson(response, 200, { user: publicUser(user) }, await createSession(response, user))
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
       const token = parseCookies(request.headers.cookie).session
-      if (token) deleteSession.run(hashToken(token))
+      if (token) await deleteSession.run(hashToken(token))
       return sendJson(response, 204, {}, { 'Set-Cookie': sessionCookie('', 0) })
     }
     if (request.method === 'GET' && url.pathname === '/api/dashboard') {
-      const user = requireUser(request, response); if (!user) return
-      return sendJson(response, 200, dashboard(user))
+      const user = await requireUser(request, response); if (!user) return
+      return sendJson(response, 200, await dashboard(user))
     }
     if (request.method === 'GET' && url.pathname === '/api/radar-items') {
-      const user = requireUser(request, response); if (!user) return
-      return sendJson(response, 200, { items: listRadarItems.all(user.id) })
+      const user = await requireUser(request, response); if (!user) return
+      return sendJson(response, 200, { items: await listRadarItems.all(user.id) })
     }
     if (request.method === 'POST' && url.pathname === '/api/radar-items') {
-      const user = requireUser(request, response); if (!user) return
+      const user = await requireUser(request, response); if (!user) return
       const body = await readBody(request)
       const title = clean(body.title, 160)
       const neighborhood = clean(body.neighborhood, 40)
@@ -449,28 +450,28 @@ const server = createServer(async (request, response) => {
       if (!['USD', 'ARS'].includes(currency)) return sendJson(response, 400, { error: 'Elegí una moneda válida.' })
       const id = randomUUID()
       const createdAt = now()
-      insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, 'detected', createdAt, createdAt)
-      return sendJson(response, 201, { items: listRadarItems.all(user.id) })
+      await insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, 'detected', createdAt, createdAt)
+      return sendJson(response, 201, { items: await listRadarItems.all(user.id) })
     }
 
     const radarStateMatch = url.pathname.match(/^\/api\/radar-items\/([\w-]+)\/state$/)
     if (request.method === 'POST' && radarStateMatch) {
-      const user = requireUser(request, response); if (!user) return
-      const item = getRadarItem.get(radarStateMatch[1], user.id)
+      const user = await requireUser(request, response); if (!user) return
+      const item = await getRadarItem.get(radarStateMatch[1], user.id)
       if (!item) return sendJson(response, 404, { error: 'Hallazgo no encontrado.' })
       const action = clean((await readBody(request)).action, 20)
       const nextState = { review: 'reviewing', discard: 'discarded', restore: 'detected' }[action]
       if (!nextState) return sendJson(response, 400, { error: 'Acción de Radar inválida.' })
       if (item.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad.' })
       if ((action === 'review' && item.state !== 'detected') || (action === 'discard' && !['detected', 'reviewing'].includes(item.state)) || (action === 'restore' && item.state !== 'discarded')) return sendJson(response, 409, { error: 'Esta transición no corresponde al estado actual del hallazgo.' })
-      updateRadarItemState.run(nextState, now(), item.id, user.id)
-      return sendJson(response, 200, { items: listRadarItems.all(user.id) })
+      await updateRadarItemState.run(nextState, now(), item.id, user.id)
+      return sendJson(response, 200, { items: await listRadarItems.all(user.id) })
     }
 
     const radarConvertMatch = url.pathname.match(/^\/api\/radar-items\/([\w-]+)\/convert$/)
     if (request.method === 'POST' && radarConvertMatch) {
-      const user = requireUser(request, response); if (!user) return
-      const item = getRadarItem.get(radarConvertMatch[1], user.id)
+      const user = await requireUser(request, response); if (!user) return
+      const item = await getRadarItem.get(radarConvertMatch[1], user.id)
       if (!item) return sendJson(response, 404, { error: 'Hallazgo no encontrado.' })
       if (item.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad.' })
       if (item.state !== 'reviewing') return sendJson(response, 409, { error: 'Marcá el hallazgo como “En revisión” antes de convertirlo en oportunidad.' })
@@ -480,17 +481,17 @@ const server = createServer(async (request, response) => {
       const nextStep = 'Completar verificación de contacto'
       const nextStepDate = createdAt.slice(0, 10)
       const notes = `Creada desde Radar. ${item.notes}`.trim()
-      withTransaction(() => {
-        insertOpportunity.run(opportunityId, user.id, item.title, item.neighborhood, item.operation, 'Detectada', 'Hallazgo manual revisado; pendiente de verificación antes de cualquier contacto.', 58, nextStep, createdAt, item.propertyType, item.source, item.sourceUrl, '', 'unknown', notes, nextStepDate, createdAt, null, '', '')
-        addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. Sin datos de contacto.`, 'Sin canal', createdAt)
-        addTask(user.id, opportunityId, nextStep, item.title, nextStepDate, 'Sin canal')
-        updateRadarItemState.run('converted', createdAt, item.id, user.id)
+      await withTransaction(async () => {
+        await insertOpportunity.run(opportunityId, user.id, item.title, item.neighborhood, item.operation, 'Detectada', 'Hallazgo manual revisado; pendiente de verificación antes de cualquier contacto.', 58, nextStep, createdAt, item.propertyType, item.source, item.sourceUrl, '', 'unknown', notes, nextStepDate, createdAt, null, '', '')
+        await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. Sin datos de contacto.`, 'Sin canal', createdAt)
+        await addTask(user.id, opportunityId, nextStep, item.title, nextStepDate, 'Sin canal')
+        await updateRadarItemState.run('converted', createdAt, item.id, user.id)
       })
-      return sendJson(response, 201, dashboard(user))
+      return sendJson(response, 201, await dashboard(user))
     }
 
     if (request.method === 'POST' && url.pathname === '/api/opportunities') {
-      const user = requireUser(request, response); if (!user) return
+      const user = await requireUser(request, response); if (!user) return
       const body = await readBody(request)
       const name = clean(body.name, 120)
       const neighborhood = clean(body.neighborhood, 40)
@@ -509,8 +510,8 @@ const server = createServer(async (request, response) => {
       const requestedChannel = clean(body.channel, 30)
       if (name.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !SOURCES.includes(source) || !PERMISSIONS.includes(contactPermission) || !CHANNELS.includes(requestedChannel) || requestedNextStep.length < 2) return sendJson(response, 400, { error: 'Revisá los datos obligatorios de la oportunidad y su próximo paso.' })
       if (!validUrl(sourceUrl)) return sendJson(response, 400, { error: 'El enlace de origen debe comenzar con http:// o https://.' })
-      if (externalSource && getOpportunityByExternal.get(user.id, externalSource, externalId)) return sendJson(response, 409, { error: 'Esta publicación ya fue guardada como oportunidad.' })
-      const radarItem = radarItemId ? getRadarItem.get(radarItemId, user.id) : null
+      if (externalSource && await getOpportunityByExternal.get(user.id, externalSource, externalId)) return sendJson(response, 409, { error: 'Esta publicación ya fue guardada como oportunidad.' })
+      const radarItem = radarItemId ? await getRadarItem.get(radarItemId, user.id) : null
       if (radarItemId && !radarItem) return sendJson(response, 404, { error: 'El hallazgo de Radar ya no existe o no pertenece a esta cuenta.' })
       if (radarItem?.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad.' })
       if (radarItem && radarItem.state !== 'reviewing') return sendJson(response, 409, { error: 'Marcá el hallazgo como “En revisión” antes de convertirlo en oportunidad.' })
@@ -525,19 +526,19 @@ const server = createServer(async (request, response) => {
           ? 'Consulta entrante con contexto de origen registrado.'
           : 'Oportunidad cargada manualmente con fuente y próximo paso registrados.'
 
-      withTransaction(() => {
-        insertOpportunity.run(opportunityId, user.id, name, neighborhood, operation, 'Detectada', reason, score, nextStep, createdAt, propertyType, source, sourceUrl, contactDetail, contactPermission, notes, nextStepDate, createdAt, null, externalSource, externalId)
-        addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad detectada', `Fuente: ${source}.`, 'Sin canal', createdAt)
-        addTask(user.id, opportunityId, nextStep, name, nextStepDate, channel, contactPermission === 'inbound' ? 'Alta' : 'Media')
-        if (radarItem) updateRadarItemState.run('converted', createdAt, radarItem.id, user.id)
+      await withTransaction(async () => {
+        await insertOpportunity.run(opportunityId, user.id, name, neighborhood, operation, 'Detectada', reason, score, nextStep, createdAt, propertyType, source, sourceUrl, contactDetail, contactPermission, notes, nextStepDate, createdAt, null, externalSource, externalId)
+        await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad detectada', `Fuente: ${source}.`, 'Sin canal', createdAt)
+        await addTask(user.id, opportunityId, nextStep, name, nextStepDate, channel, contactPermission === 'inbound' ? 'Alta' : 'Media')
+        if (radarItem) await updateRadarItemState.run('converted', createdAt, radarItem.id, user.id)
       })
-      return sendJson(response, 201, dashboard(user))
+      return sendJson(response, 201, await dashboard(user))
     }
 
     const preparationMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/contact-preparation$/)
     if (request.method === 'PUT' && preparationMatch) {
-      const user = requireUser(request, response); if (!user) return
-      const opportunity = getOpportunity.get(preparationMatch[1], user.id)
+      const user = await requireUser(request, response); if (!user) return
+      const opportunity = await getOpportunity.get(preparationMatch[1], user.id)
       if (!opportunity) return sendJson(response, 404, { error: 'Oportunidad no encontrada.' })
       if (opportunity.closedAt) return sendJson(response, 409, { error: 'La oportunidad ya está cerrada.' })
       if (opportunity.contactPermission === 'do_not_contact') return sendJson(response, 409, { error: 'Esta oportunidad está marcada como “No contactar”.' })
@@ -553,14 +554,14 @@ const server = createServer(async (request, response) => {
       const status = preparationStatus({ sourceReviewed, listingPolicy, channel, noLlameCheckedAt })
       if (listingPolicy === 'no_agents' && draft) return sendJson(response, 400, { error: 'No guardes un borrador cuando el aviso restringe el contacto de inmobiliarias.' })
       const updatedAt = now()
-      updateContactPreparation.run(sourceReviewed ? 1 : 0, listingPolicy, noLlameCheckedAt, channel, draft, notes, status, updatedAt, updatedAt, opportunity.id, user.id)
-      return sendJson(response, 200, dashboard(user))
+      await updateContactPreparation.run(sourceReviewed ? 1 : 0, listingPolicy, noLlameCheckedAt, channel, draft, notes, status, updatedAt, updatedAt, opportunity.id, user.id)
+      return sendJson(response, 200, await dashboard(user))
     }
 
     const eventMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/events$/)
     if (request.method === 'POST' && eventMatch) {
-      const user = requireUser(request, response); if (!user) return
-      const opportunity = getOpportunity.get(eventMatch[1], user.id)
+      const user = await requireUser(request, response); if (!user) return
+      const opportunity = await getOpportunity.get(eventMatch[1], user.id)
       if (!opportunity) return sendJson(response, 404, { error: 'Oportunidad no encontrada.' })
       if (opportunity.closedAt) return sendJson(response, 409, { error: 'La oportunidad ya está cerrada.' })
       const body = await readBody(request)
@@ -576,20 +577,20 @@ const server = createServer(async (request, response) => {
       if (!event.closed && nextStep.length < 2) return sendJson(response, 400, { error: 'Las oportunidades abiertas deben conservar un próximo paso.' })
       const updatedAt = now()
       const reason = notes || event.label
-      withTransaction(() => {
-        addEvent(user.id, opportunity.id, eventType, event.label, notes, channel, updatedAt)
-        completeOpportunityTasks.run(opportunity.id, user.id)
-        updateOpportunityProgress.run(event.status, reason, event.closed ? '' : nextStep, event.closed ? '' : nextStepDate, updatedAt, event.closed ? updatedAt : null, opportunity.id, user.id)
-        if (!event.closed) addTask(user.id, opportunity.id, nextStep, opportunity.name, nextStepDate, channel, ['valuation_scheduled', 'valuation_completed', 'proposal_sent'].includes(eventType) ? 'Alta' : 'Media')
+      await withTransaction(async () => {
+        await addEvent(user.id, opportunity.id, eventType, event.label, notes, channel, updatedAt)
+        await completeOpportunityTasks.run(opportunity.id, user.id)
+        await updateOpportunityProgress.run(event.status, reason, event.closed ? '' : nextStep, event.closed ? '' : nextStepDate, updatedAt, event.closed ? updatedAt : null, opportunity.id, user.id)
+        if (!event.closed) await addTask(user.id, opportunity.id, nextStep, opportunity.name, nextStepDate, channel, ['valuation_scheduled', 'valuation_completed', 'proposal_sent'].includes(eventType) ? 'Alta' : 'Media')
       })
-      return sendJson(response, 201, dashboard(user))
+      return sendJson(response, 201, await dashboard(user))
     }
 
     const taskMatch = url.pathname.match(/^\/api\/tasks\/([\w-]+)\/complete$/)
     if (request.method === 'POST' && taskMatch) {
-      const user = requireUser(request, response); if (!user) return
-      completeTask.run(taskMatch[1], user.id)
-      return sendJson(response, 200, dashboard(user))
+      const user = await requireUser(request, response); if (!user) return
+      await completeTask.run(taskMatch[1], user.id)
+      return sendJson(response, 200, await dashboard(user))
     }
     return serveStatic(request, response, url.pathname)
   } catch (error) {

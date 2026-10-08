@@ -38,7 +38,7 @@ La aplicación implementa una versión interactiva de la pantalla **Hoy** con au
 - verificación persistente de contacto para oportunidades de portal, con borrador copiable y sin envío automático;
 - diseño responsive para escritorio y móvil.
 
-La API local usa una base SQLite y sesiones HTTP-only. No se almacenan contraseñas en texto plano. El servidor ya aplica controles de staging en producción (origen HTTPS, cabeceras y límites de intentos), pero SQLite no está aprobada para datos personales reales. La plantilla de configuración es [`.env.example`](.env.example) y las condiciones completas están en [`../docs/PRODUCCION_SEGURA.md`](../docs/PRODUCCION_SEGURA.md).
+La API local usa SQLite y sesiones HTTP-only; si existe `DATABASE_URL`, utiliza PostgreSQL administrado. No se almacenan contraseñas en texto plano. El servidor aplica controles de producción (origen HTTPS, cabeceras y límites de intentos), pero los datos personales requieren crear y verificar la infraestructura externa antes de operar. La plantilla de configuración es [`.env.example`](.env.example) y las condiciones completas están en [`../docs/PRODUCCION_SEGURA.md`](../docs/PRODUCCION_SEGURA.md).
 
 ## Documentación funcional
 

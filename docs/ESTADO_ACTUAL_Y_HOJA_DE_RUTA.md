@@ -1,7 +1,7 @@
 # Estado actual y hoja de ruta
 
 **Fecha de corte:** 2026-10-08  
-**Estado del producto:** prototipo local funcional con endurecimiento de staging; validación manual pendiente.
+**Estado del producto:** prototipo funcional con despliegue Render + Neon preparado; activación y validación externa pendientes.
 **Fuente canónica:** este documento determina qué está operativo y qué sigue siendo diseño.
 
 ## Objetivo vigente
@@ -37,7 +37,7 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Zonaprop/Argenprop | Sin integración | Accesos manuales desde Radar; acuerdo de metadatos sólo como etapa futura. |
 | Mensajería/redes | Sin integración | Registro manual; ningún envío o lectura automática. |
 | Exportación/eliminación | No implementada | Requisito previo al piloto con datos reales. |
-| Producción segura | Parcial: staging endurecido | Origen HTTPS, cabeceras, límites de intentos, health check y precondiciones de arranque. Aún faltan hosting, base administrada, backups y operación. |
+| Producción segura | Preparada, no activada | PostgreSQL por `DATABASE_URL`, configuración Render, origen HTTPS, cabeceras, límites de intentos y health check. Faltan crear recursos, validar el despliegue, backups/recuperación y operación. |
 
 ## Arquitectura actual
 
@@ -48,15 +48,15 @@ React + TypeScript + Vite
           ▼
 Node.js HTTP server
           │
-          ▼
-SQLite local: usuarios, sesiones, oportunidades, tareas y eventos
+          ├── SQLite local (desarrollo)
+          └── PostgreSQL administrado (producción, mediante `DATABASE_URL`)
 ```
 
 - Código de interfaz: `web/src/`.
 - API y migraciones: `web/server/index.mjs`.
-- Base de desarrollo: `web/data/agente.sqlite`.
+- Base de desarrollo: `web/data/agente.sqlite`; producción prevista: Neon PostgreSQL.
 - El directorio de datos está excluido de Git.
-- En desarrollo la API escucha en `127.0.0.1`; en producción requiere `APP_ORIGIN` HTTPS y configuración explícita. Ver [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md).
+- En desarrollo la API escucha en `127.0.0.1`; en producción requiere origen HTTPS y configuración explícita. Ver [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md) y [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md).
 
 ## Modelo de dominio operativo
 
@@ -165,7 +165,7 @@ Presentar un piloto de metadatos de 60–90 días, con alcance limitado, atribuc
 
 ### P0 — Antes de datos personales
 
-1. Infraestructura y seguridad de la Etapa B.
+1. Crear Neon y Render, configurar el secreto y verificar el primer despliegue sin datos personales.
 2. Aviso de privacidad y consentimiento versionado.
 3. Retención, baja, exportación y supresión.
 4. Auditoría de acciones sensibles.
