@@ -197,20 +197,26 @@ function DashboardScreen({ dashboard, setDashboard, notice, setNotice, onLogout 
   const [view, setView] = useState<View>('Hoy')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isRadarCreateOpen, setIsRadarCreateOpen] = useState(false)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [loggingOut, setLoggingOut] = useState(false)
   const { user } = dashboard
   const selectedOpportunity = dashboard.opportunities.find((item) => item.id === selectedId) ?? null
-  const logout = async () => { await api('/api/auth/logout', { method: 'POST' }); onLogout() }
+  const logout = async () => {
+    setLoggingOut(true)
+    try { await api('/api/auth/logout', { method: 'POST' }); onLogout() } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'No se pudo cerrar la sesión.') } finally { setLoggingOut(false) }
+  }
   const updateDashboard = (data: Dashboard, message: string) => { setDashboard(data); setNotice(message) }
+  const updateProfile = (updatedUser: User, message: string) => { setDashboard({ ...dashboard, user: updatedUser }); setIsProfileOpen(false); setNotice(message) }
   const titles: Record<View, string> = { Hoy: user.isDemo ? 'Buen día, Florencia' : `Buen día, ${user.name}`, Radar: 'Radar de oportunidades', Oportunidades: 'Tu cartera de oportunidades', Contactos: 'Contactos registrados', Campañas: 'Campañas', Métricas: 'Métricas' }
   const navigation: Array<[View, string]> = [['Hoy', '◈'], ['Radar', '⌁'], ['Oportunidades', '◎'], ['Contactos', '◉'], ['Campañas', '◐'], ['Métricas', '◌']]
 
   return <main className="app-shell">
     <aside className="sidebar">
       <Brand />
-      <div className="account-card"><span className={`avatar ${user.isDemo ? 'demo' : 'personal'}`}>{user.name.slice(0, 2).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.isDemo ? 'Cuenta demo · datos sintéticos' : 'Cuenta privada'}</small></div></div>
+      <button className="account-card account-button" type="button" onClick={() => setIsProfileOpen(true)} aria-label="Abrir perfil de usuario"><span className={`avatar ${user.isDemo ? 'demo' : 'personal'}`}>{user.name.slice(0, 2).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.isDemo ? 'Cuenta demo · datos sintéticos' : 'Cuenta privada'}</small></span><span className="account-chevron" aria-hidden="true">›</span></button>
       <nav aria-label="Navegación principal">{navigation.map(([item, icon]) => <button className={item === view ? 'nav-item active' : 'nav-item'} key={item} onClick={() => { setView(item); setNotice('') }} type="button"><span aria-hidden="true">{icon}</span>{item}</button>)}</nav>
-      <button className="logout-button" type="button" onClick={logout}>Cerrar sesión</button>
+      <div className="account-actions"><button className="profile-button" type="button" onClick={() => setIsProfileOpen(true)}>Perfil</button><button className="logout-button" type="button" onClick={() => void logout()} disabled={loggingOut}>{loggingOut ? 'Cerrando…' : 'Cerrar sesión'}</button></div>
       <div className="sidebar-foot"><span className={user.isDemo ? 'demo-dot' : 'personal-dot'} />{user.isDemo ? 'Datos demo aislados' : 'Datos guardados en tu cuenta'}</div>
     </aside>
     <section className="workspace">
@@ -224,6 +230,7 @@ function DashboardScreen({ dashboard, setDashboard, notice, setNotice, onLogout 
     </section>
     {isCreateOpen && <OpportunityModal isDemo={user.isDemo} onClose={() => setIsCreateOpen(false)} onSaved={(data) => { setIsCreateOpen(false); updateDashboard(data, 'Oportunidad y próximo paso guardados.') }} />}
     {selectedOpportunity && <OpportunityDetail opportunity={selectedOpportunity} agentName={user.name} onClose={() => setSelectedId(null)} onSaved={(data, message = 'Resultado registrado y próximo paso actualizado.') => updateDashboard(data, message)} />}
+    {isProfileOpen && <ProfileModal user={user} onClose={() => setIsProfileOpen(false)} onSaved={updateProfile} />}
   </main>
 }
 
@@ -345,6 +352,62 @@ function OpportunityList({ opportunities, onOpen }: { opportunities: Opportunity
     <button type="button" className="opportunity-copy" onClick={() => onOpen(opportunity.id)}><div className="opportunity-title"><h3>{opportunity.name}</h3><span>{opportunity.status}</span></div><p>{opportunity.propertyType} · {opportunity.neighborhood} · {opportunity.operation}</p><small>{opportunity.source} · {permissionLabels[opportunity.contactPermission]}</small></button>
     <button className="next-step" type="button" onClick={() => onOpen(opportunity.id)}>{opportunity.closedAt ? 'Ver historial' : opportunity.nextStep} <span>→</span></button>
   </article>)}{opportunities.length === 0 && <p className="empty-state">No hay oportunidades que coincidan con estos filtros.</p>}</div>
+}
+
+function ProfileModal({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: (user: User, message: string) => void }) {
+  const [name, setName] = useState(user.name)
+  const [profileError, setProfileError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setProfileError('')
+    setSavingProfile(true)
+    try {
+      const result = await api<{ user: User }>('/api/account/profile', { method: 'PUT', body: JSON.stringify({ name }) })
+      onSaved(result.user, 'Perfil actualizado.')
+    } catch (reason) { setProfileError(reason instanceof Error ? reason.message : 'No se pudo actualizar el perfil.') } finally { setSavingProfile(false) }
+  }
+
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setPasswordError('')
+    const data = new FormData(event.currentTarget)
+    const currentPassword = String(data.get('currentPassword') ?? '')
+    const newPassword = String(data.get('newPassword') ?? '')
+    const confirmation = String(data.get('confirmation') ?? '')
+    if (newPassword !== confirmation) { setPasswordError('La confirmación no coincide con la nueva contraseña.'); return }
+    setSavingPassword(true)
+    try {
+      const result = await api<{ user: User }>('/api/account/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) })
+      onSaved(result.user, 'Contraseña actualizada. Se cerraron las demás sesiones activas.')
+    } catch (reason) { setPasswordError(reason instanceof Error ? reason.message : 'No se pudo actualizar la contraseña.') } finally { setSavingPassword(false) }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+    <button className="modal-close" type="button" onClick={onClose} aria-label="Cerrar perfil">×</button>
+    <p className="eyebrow">CUENTA Y SEGURIDAD</p><h2 id="profile-modal-title">Perfil de usuario</h2>
+    <p className="modal-description">Tu cuenta es privada. El email identifica el acceso y no se muestra en oportunidades ni contactos.</p>
+    <section className="profile-identity"><span className={`avatar ${user.isDemo ? 'demo' : 'personal'}`}>{user.name.slice(0, 2).toUpperCase()}</span><div><strong>{user.isDemo ? 'Cuenta Demo' : 'Cuenta privada'}</strong><small>{user.isDemo ? 'Datos sintéticos para recorrer el producto.' : 'Tu información queda separada de las demás cuentas.'}</small></div></section>
+    {user.isDemo ? <p className="profile-readonly">La Demo es compartida y se mantiene como referencia con datos ficticios. Para usar tu propia base, creá una cuenta privada desde la pantalla de acceso.</p> : <>
+      <form onSubmit={saveProfile}>
+        <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} autoFocus minLength={2} maxLength={80} required /></label>
+        <label>Email de acceso<input value={user.email} readOnly aria-readonly="true" /><small>El cambio de email requerirá verificación en una próxima etapa.</small></label>
+        {profileError && <p className="form-error" role="alert">{profileError}</p>}
+        <div className="modal-actions"><button type="button" className="cancel-button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit" disabled={savingProfile}>{savingProfile ? 'Guardando…' : 'Guardar perfil'}</button></div>
+      </form>
+      <section className="profile-password"><h3>Cambiar contraseña</h3><p>Al confirmarla, se cerrarán las demás sesiones activas de esta cuenta.</p>
+        <form onSubmit={changePassword}>
+          <label>Contraseña actual<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+          <div className="form-row"><label>Nueva contraseña<input name="newPassword" type="password" autoComplete="new-password" minLength={12} maxLength={256} required /><small>Al menos 12 caracteres.</small></label><label>Confirmar contraseña<input name="confirmation" type="password" autoComplete="new-password" minLength={12} maxLength={256} required /></label></div>
+          {passwordError && <p className="form-error" role="alert">{passwordError}</p>}
+          <div className="modal-actions"><button className="secondary-button" type="submit" disabled={savingPassword}>{savingPassword ? 'Actualizando…' : 'Actualizar contraseña'}</button></div>
+        </form>
+      </section>
+    </>}
+  </section></div>
 }
 
 function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (items: RadarItem[]) => void }) {

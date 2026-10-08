@@ -31,6 +31,7 @@
 | D-024 | 2026-10-08 | La aplicación exige una configuración explícita y controles de origen para iniciar en producción; SQLite local sólo puede usarse como staging técnico sin datos personales. | Evita despliegues accidentales y prepara HTTPS, cabeceras, rate limiting y health checks mientras se define la migración a una base administrada. | Implementada parcialmente |
 | D-025 | 2026-10-08 | El primer despliegue se realizará con Render como servicio web y Neon PostgreSQL como base administrada. | Mantiene la aplicación Node actual, separa la persistencia del disco efímero y permite guardar la conexión como secreto. SQLite queda limitado a desarrollo o staging técnico. | Preparada; activación pendiente |
 | D-026 | 2026-10-08 | Se activa `agente-inmobiliario-dev` en Render conectado a Neon, sólo para validación con datos sintéticos. | Permite comprobar compilación, conexión, HTTPS y health check sin mezclar el incremento con `main` ni habilitar todavía datos personales reales. | Implementada y verificada |
+| D-027 | 2026-10-08 | El perfil inicial permite actualizar sólo el nombre visible y cambiar la contraseña con verificación de la actual; el email queda inmutable hasta incorporar verificación de propiedad. | Evita reasignar silenciosamente una cuenta desde una sesión comprometida; el cambio de contraseña revoca las demás sesiones. | Implementada y verificada localmente |
 
 ## Cómo registrar cambios
 

@@ -153,8 +153,11 @@ const withTransaction = async (operation) => db.transaction(operation)
 const getUserByEmail = db.prepare('SELECT * FROM users WHERE email = ?')
 const getUserById = db.prepare('SELECT id, email, display_name, role FROM users WHERE id = ?')
 const insertUser = db.prepare('INSERT INTO users (id, email, display_name, password_hash, password_salt, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+const updateUserDisplayName = db.prepare('UPDATE users SET display_name = ? WHERE id = ?')
+const updateUserPassword = db.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?')
 const insertSession = db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
 const deleteSession = db.prepare('DELETE FROM sessions WHERE token_hash = ?')
+const deleteUserSessions = db.prepare('DELETE FROM sessions WHERE user_id = ?')
 const getSessionUser = db.prepare('SELECT u.id, u.email, u.display_name, u.role, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
 const deleteExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?')
 const opportunityFields = `
@@ -423,6 +426,30 @@ const server = createServer(async (request, response) => {
       const token = parseCookies(request.headers.cookie).session
       if (token) await deleteSession.run(hashToken(token))
       return sendJson(response, 204, {}, { 'Set-Cookie': sessionCookie('', 0) })
+    }
+    if (request.method === 'PUT' && url.pathname === '/api/account/profile') {
+      const user = await requireUser(request, response); if (!user) return
+      if (user.role === 'demo') return sendJson(response, 403, { error: 'El perfil de la cuenta Demo no se puede modificar.' })
+      const displayName = clean((await readBody(request)).name, 80)
+      if (displayName.length < 2) return sendJson(response, 400, { error: 'Ingresá un nombre de al menos 2 caracteres.' })
+      await updateUserDisplayName.run(displayName, user.id)
+      return sendJson(response, 200, { user: publicUser(await getUserById.get(user.id)) })
+    }
+    if (request.method === 'PUT' && url.pathname === '/api/account/password') {
+      const user = await requireUser(request, response); if (!user) return
+      if (user.role === 'demo') return sendJson(response, 403, { error: 'La contraseña de la cuenta Demo no se puede modificar.' })
+      const body = await readBody(request)
+      const currentPassword = String(body.currentPassword ?? '')
+      const newPassword = String(body.newPassword ?? '')
+      if (newPassword.length < 12 || newPassword.length > 256) return sendJson(response, 400, { error: 'La nueva contraseña debe tener entre 12 y 256 caracteres.' })
+      const credential = await getUserByEmail.get(user.email)
+      if (!credential || !(await passwordMatches(currentPassword, credential))) return sendJson(response, 401, { error: 'La contraseña actual no es correcta.' })
+      const { salt, hash } = await hashPassword(newPassword)
+      await withTransaction(async () => {
+        await updateUserPassword.run(hash, salt, user.id)
+        await deleteUserSessions.run(user.id)
+      })
+      return sendJson(response, 200, { user: publicUser(await getUserById.get(user.id)) }, await createSession(response, user))
     }
     if (request.method === 'GET' && url.pathname === '/api/dashboard') {
       const user = await requireUser(request, response); if (!user) return

@@ -18,6 +18,9 @@ Hay dos clases de cuenta:
 - Las contraseñas se derivan con `scrypt` y una sal aleatoria; nunca se almacenan en texto plano.
 - Las sesiones usan tokens aleatorios. La base solo guarda su hash SHA-256.
 - La cookie de sesión es `HttpOnly`; en producción usa `SameSite=Strict`, `Secure` y `Priority=High`.
+- El usuario puede cerrar sesión desde cualquier tamaño de pantalla. La API invalida el token de sesión guardado y vence la cookie del navegador.
+- El perfil permite modificar el nombre visible y cambiar la contraseña, solicitando la contraseña actual. Al cambiarla se invalidan las demás sesiones activas y se crea una nueva para el navegador actual.
+- El email se muestra como identificador de acceso, pero su modificación queda diferida hasta contar con verificación de propiedad del email. La cuenta Demo no permite cambios de perfil ni contraseña.
 - Todas las consultas y actualizaciones de oportunidades/tareas filtran por el usuario autenticado en la API, no en la interfaz.
 - La API de desarrollo escucha únicamente en `127.0.0.1`.
 - La base activa claves foráneas y está excluida de Git.
@@ -36,6 +39,16 @@ opportunities 1 ── N tasks
 ```
 
 El dominio conserva usuarios, sesiones, oportunidades, tareas y eventos comerciales. La vista **Contactos** se deriva del dato opcional guardado en la oportunidad; todavía no existe una entidad independiente. Campañas, metas configurables y auditoría de acciones sensibles siguen pendientes.
+
+### Perfil y credenciales
+
+| Ruta | Finalidad | Regla relevante |
+|---|---|---|
+| `POST /api/auth/logout` | Cierra la sesión actual. | Elimina el hash de token y vence la cookie. |
+| `PUT /api/account/profile` | Actualiza el nombre visible. | Requiere sesión; Demo queda en modo de solo lectura. |
+| `PUT /api/account/password` | Reemplaza la contraseña. | Requiere contraseña actual, 12–256 caracteres e invalida las demás sesiones. |
+
+No se implementa cambio de email sin comprobación de la nueva dirección. Evita que una sesión comprometida pueda reasignar silenciosamente el acceso de la cuenta.
 
 Se verificó que una cuenta no puede registrar eventos sobre oportunidades ajenas (`404`) y que una oportunidad marcada como `do_not_contact` rechaza eventos comerciales (`409`). Estas comprobaciones todavía deben convertirse en tests automatizados antes del piloto real.
 

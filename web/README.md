@@ -26,6 +26,7 @@ La aplicación implementa una versión interactiva de la pantalla **Hoy** con au
 
 - **Demo:** campaña y datos semilla sintéticos, pensados para recorrer el flujo sin afectar el espacio personal;
 - **Mi espacio:** cada usuario crea su cuenta con email y contraseña; sus oportunidades y tareas se guardan aisladas en la base local;
+- perfil de cuenta con nombre editable, email de acceso visible, cambio de contraseña verificado y cierre de sesión disponible en escritorio y móvil;
 - campaña demo activa para venta y alquiler en los cinco barrios definidos;
 - meta y progreso de captación;
 - acciones priorizadas, que pueden marcarse como completadas;

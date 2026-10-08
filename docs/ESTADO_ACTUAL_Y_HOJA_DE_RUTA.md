@@ -21,6 +21,7 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Cuenta Demo | Implementada | Datos sintéticos aislados. |
 | Cuenta personal | Implementada localmente | Registro con email y contraseña; no aprobada aún para datos reales. |
 | Sesiones | Implementadas | Token aleatorio hashado; cookie HTTP-only, `SameSite=Strict` y `Secure` en producción. |
+| Perfil y cierre de sesión | Implementados | Nombre visible editable, email de acceso de solo lectura, cambio de contraseña con invalidación de otras sesiones y Demo inmutable. |
 | Vista Hoy | Implementada | Oportunidades, conversaciones, captaciones y próximos pasos. |
 | Alta manual | Implementada | Fuente, enlace, propiedad, permiso, notas, canal, acción y fecha. |
 | Cartera | Implementada | Búsqueda, filtros por estado/barrio y ficha individual. |
