@@ -63,7 +63,7 @@ Cada tarjeta ofrece **Ver oportunidad**, que abre la URL original. Los estados s
 | Oportunidad creada | Se convirtió desde el Radar y se registró el paso de verificación de contacto. | No se trasladan datos de contacto. |
 | Descartada | No continuará en el flujo. Puede reactivarse. | No se guardan. |
 
-Al elegir **Convertir en oportunidad**, el sistema crea de inmediato una oportunidad con los datos mínimos ya cargados y el próximo paso **Completar verificación de contacto**. No copia datos personales, no envía mensajes ni da por autorizado un contacto. El hallazgo sale de la bandeja activa del Radar y aparece en **Oportunidades**; queda marcado como convertido para evitar duplicados.
+Al elegir **Convertir en oportunidad**, el sistema crea de inmediato una oportunidad con los datos mínimos ya cargados y el próximo paso **Completar verificación de contacto**. No copia datos personales, no envía mensajes ni da por autorizado un contacto. Si el hallazgo tenía precio orientativo, éste se conserva como la primera **observación manual de precio**, no como un monitoreo del portal. El hallazgo sale de la bandeja activa del Radar y aparece en **Oportunidades**; queda marcado como convertido para evitar duplicados.
 
 ## Contacto: barrera obligatoria
 
@@ -79,6 +79,8 @@ Guardar o revisar un aviso **no autoriza** contactar al anunciante. Antes de cre
 La Ley 26.951 exige a quienes ofrecen servicios por telefonía consultar el Registro Nacional No Llame; la excepción relevante exige autorización expresa de la persona. [Texto de la ley](https://www.argentina.gob.ar/normativa/nacional/ley-26951-233066/texto). Como política conservadora del producto, WhatsApp se tratará con la misma cautela operativa hasta contar con revisión legal específica.
 
 No se implementan mensajes automáticos, campañas, botones de envío, lectura de WhatsApp ni captura de contactos. El borrador de primer mensaje es texto editable para copiar y sólo se habilita después del checklist persistente de contacto; nunca aparece directamente desde una tarjeta de Radar. El alcance completo está en [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md).
+
+Después de la conversión, el usuario puede cargar manualmente un dato de contacto y la preferencia de seguimiento en la ficha de la oportunidad. “Latente” crea una revisión humana, no una autorización de contacto ni un reintento automático; “No contactar” bloquea el flujo comercial. El detalle está en [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md).
 
 ## Protección de datos y reglas de uso
 

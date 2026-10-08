@@ -27,9 +27,10 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Alta manual | Implementada | Fuente, enlace, propiedad, permiso, notas, canal, acción y fecha. |
 | Cartera | Implementada | Búsqueda, filtros por estado/barrio y ficha individual. |
 | Historial comercial | Implementado | Eventos explícitos; no se infieren resultados desde tareas. |
-| Contactos | Vista derivada implementada | El dato se guarda en la oportunidad; todavía no existe entidad independiente. |
+| Contactos | Vista derivada implementada | El dato se carga manualmente en la oportunidad con origen y preferencia; todavía no existe entidad independiente. |
 | Restricción “No contactar” | Implementada | Fuerza revisión interna y bloquea eventos comerciales en la API. |
 | Verificación de contacto en portales | Implementada localmente | Checklist, bloqueo, borrador copiable y control de servidor; sin envíos ni consulta automática de No Llame. |
+| Seguimiento y precio manual | Implementado localmente | Preferencias “seguimiento acordado”, “latente”, “no continuar” y “no contactar”; tareas de revisión y observaciones de precio sin monitoreo externo. |
 | Campañas | No implementadas | Solo existe una presentación demo y una vista informativa. |
 | Captación entrante | No implementada | Requiere formulario público, consentimiento y protección antiabuso. |
 | Goal Engine | No implementado | La meta demo es ilustrativa; no hay cálculo configurable. |

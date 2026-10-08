@@ -30,7 +30,7 @@ En la ficha de una oportunidad cuya fuente sea Mercado Libre, Zonaprop, Argenpro
 - nota breve de verificación;
 - borrador editable de primer mensaje.
 
-No se guardan fotos, textos completos del portal ni datos de contacto mediante este flujo.
+No se guardan fotos ni textos completos del portal mediante este flujo. Los datos de contacto, si resultan legítimos y necesarios, se cargan manualmente más tarde en la oportunidad junto con su origen y preferencia de seguimiento; nunca se extraen del portal. Ver [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md).
 
 ## Reglas de bloqueo
 

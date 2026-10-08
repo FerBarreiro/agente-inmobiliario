@@ -14,6 +14,7 @@ Existe un prototipo web local con:
 - búsqueda y filtros;
 - radar manual privado: hallazgos, enlace al aviso original, revisión, descarte y conversión deliberada a oportunidad;
 - checklist de contacto para oportunidades de portal y borrador editable que sólo se copia manualmente;
+- datos de contacto manuales, preferencias de seguimiento y precios observados sin monitoreo externo;
 - restricciones de contacto visibles y aplicadas en el servidor.
 - controles de producción: origen HTTPS autorizado, cabeceras de seguridad, límites de intentos, health check y soporte para PostgreSQL administrado.
 

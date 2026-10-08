@@ -16,6 +16,7 @@ Este directorio separa deliberadamente la visión futura, las decisiones vigente
 8. [`ESTRATEGIA_VALIDACION_Y_PORTALES.md`](ESTRATEGIA_VALIDACION_Y_PORTALES.md) — secuencia manual → entrante → evidencia → acuerdos con portales.
 9. [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md) — Radar manual, reglas de contacto y crecimiento sin integraciones.
 10. [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md) — flujo, controles y activación segura del correo de recuperación.
+11. [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md) — contacto manual, preferencias de seguimiento y precio observado.
 
 ## Catálogo
 
@@ -32,6 +33,7 @@ Este directorio separa deliberadamente la visión futura, las decisiones vigente
 | [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md) | Checklist de contacto y borrador copiable. | Implementado localmente; sin envíos ni datos reales. |
 | [`AUTENTICACION_Y_DATOS.md`](AUTENTICACION_Y_DATOS.md) | Arquitectura de cuenta, datos y seguridad. | Implementación local; activación externa pendiente. |
 | [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md) | Restablecimiento de contraseña, tokens y correo transaccional. | Implementado y probado localmente; envío externo pendiente. |
+| [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md) | Contacto manual, preferencias, tareas de revisión y precio observado. | Implementado y verificado localmente; sin monitoreo o contacto automático. |
 | [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md) | Endurecimiento de producción y precondiciones de datos reales. | Implementado; requiere verificación operativa antes de activarse. |
 | [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md) | Configuración versionada y activación segura de Render + Neon. | Render promueve desde `main`; `dev` queda para desarrollo local. No habilita datos personales reales. |
 | [`ESTRATEGIA_VALIDACION_Y_PORTALES.md`](ESTRATEGIA_VALIDACION_Y_PORTALES.md) | Estrategia de captación e integraciones autorizadas. | Aprobada; integraciones aún no implementadas. |

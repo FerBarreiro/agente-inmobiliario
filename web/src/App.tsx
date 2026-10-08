@@ -23,6 +23,14 @@ type OpportunityEvent = {
   channel: string
   createdAt: string
 }
+type PriceObservation = {
+  id: string
+  opportunityId: string
+  amount: number
+  currency: 'USD' | 'ARS'
+  observedAt: string
+  createdAt: string
+}
 type Opportunity = {
   id: string
   name: string
@@ -52,7 +60,12 @@ type Opportunity = {
   contactPreparationNotes: string
   contactPreparationStatus: 'not_started' | 'pending' | 'ready' | 'blocked'
   contactPreparationUpdatedAt: string
+  contactOrigin: 'not_recorded' | 'directly_provided' | 'inbound' | 'prior_relationship' | 'listing_to_verify' | 'other'
+  contactPreference: 'not_contacted' | 'follow_up_agreed' | 'latent' | 'not_continue' | 'do_not_contact'
+  contactFollowUpAt: string
+  contactPreferenceNote: string
   events: OpportunityEvent[]
+  priceObservations: PriceObservation[]
 }
 type Dashboard = { user: User; tasks: Task[]; opportunities: Opportunity[] }
 type AuthMode = 'login' | 'register'
@@ -88,10 +101,19 @@ const eventTypes = [
   ['property_captured', 'Propiedad captada'],
   ['opportunity_lost', 'Oportunidad perdida'],
 ] as const
-const permissionLabels = {
-  unknown: 'Permiso no confirmado',
+const contactOriginLabels = {
+  not_recorded: 'No cargado',
+  directly_provided: 'Aportado directamente',
   inbound: 'Consulta entrante',
-  explicit: 'Permiso explícito',
+  prior_relationship: 'Relación previa',
+  listing_to_verify: 'Aviso a verificar',
+  other: 'Otro origen manual',
+}
+const contactPreferenceLabels = {
+  not_contacted: 'Sin contacto aún',
+  follow_up_agreed: 'Seguimiento acordado',
+  latent: 'Latente',
+  not_continue: 'No continuar',
   do_not_contact: 'No contactar',
 }
 
@@ -377,7 +399,7 @@ function OpportunitiesView({ opportunities, onOpen }: { opportunities: Opportuni
 function ContactsView({ opportunities, onOpen }: { opportunities: Opportunity[]; onOpen: (id: string) => void }) {
   const contacts = opportunities.filter((item) => item.contactDetail)
   return <section className="panel directory-panel"><div className="panel-heading"><div><p className="eyebrow">DATOS APORTADOS MANUALMENTE</p><h2>{contacts.length} contactos registrados</h2></div></div><div className="contact-list">
-    {contacts.map((item) => <button type="button" className="contact-row" key={item.id} onClick={() => onOpen(item.id)}><span className="contact-avatar">{item.name.slice(0, 2).toUpperCase()}</span><span><strong>{item.name}</strong><small>{item.contactDetail}</small></span><span className={`permission-chip ${item.contactPermission}`}>{permissionLabels[item.contactPermission]}</span><span>→</span></button>)}
+    {contacts.map((item) => <button type="button" className="contact-row" key={item.id} onClick={() => onOpen(item.id)}><span className="contact-avatar">{item.name.slice(0, 2).toUpperCase()}</span><span><strong>{item.name}</strong><small>{item.contactDetail}</small></span><span className={`permission-chip ${item.contactPreference}`}>{contactPreferenceLabels[item.contactPreference]}</span><span>→</span></button>)}
     {contacts.length === 0 && <div className="empty-card"><strong>No hay contactos cargados</strong><p>Podés conservar una oportunidad sin datos personales y agregarlos solo cuando sean necesarios y legítimos.</p></div>}
   </div></section>
 }
@@ -389,7 +411,7 @@ function PlannedView({ view }: { view: 'Campañas' | 'Métricas' }) {
 function OpportunityList({ opportunities, onOpen }: { opportunities: Opportunity[]; onOpen: (id: string) => void }) {
   return <div className="opportunity-list">{opportunities.map((opportunity) => <article className="opportunity" key={opportunity.id}>
     <div className="opportunity-score" style={{ '--score': opportunity.score } as CSSProperties}><span>{opportunity.score}</span></div>
-    <button type="button" className="opportunity-copy" onClick={() => onOpen(opportunity.id)}><div className="opportunity-title"><h3>{opportunity.name}</h3><span>{opportunity.status}</span></div><p>{opportunity.propertyType} · {opportunity.neighborhood} · {opportunity.operation}</p><small>{opportunity.source} · {permissionLabels[opportunity.contactPermission]}</small></button>
+    <button type="button" className="opportunity-copy" onClick={() => onOpen(opportunity.id)}><div className="opportunity-title"><h3>{opportunity.name}</h3><span>{opportunity.status}</span></div><p>{opportunity.propertyType} · {opportunity.neighborhood} · {opportunity.operation}</p><small>{opportunity.source} · {contactPreferenceLabels[opportunity.contactPreference]}</small></button>
     <button className="next-step" type="button" onClick={() => onOpen(opportunity.id)}>{opportunity.closedAt ? 'Ver historial' : opportunity.nextStep} <span>→</span></button>
   </article>)}{opportunities.length === 0 && <p className="empty-state">No hay oportunidades que coincidan con estos filtros.</p>}</div>
 }
@@ -466,7 +488,7 @@ function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (i
       <div className="form-row"><label>Referencia del aviso<input name="title" placeholder="Ej. Depto 3 amb. con balcón" autoFocus minLength={2} required /></label><label>Portal<select name="source"><option>Mercado Libre</option><option>Zonaprop</option><option>Argenprop</option><option>Otro</option></select></label></div>
       <label>Enlace de la publicación<input name="sourceUrl" type="url" placeholder="https://…" required /></label>
       <div className="form-row"><label>Barrio<select name="neighborhood">{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation"><option>Venta</option><option>Alquiler</option></select></label></div>
-      <div className="form-row"><label>Tipo de propiedad<select name="propertyType">{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="0" step="1" inputMode="numeric" placeholder="Ej. 185000" /></label></div>
+      <div className="form-row"><label>Tipo de propiedad<select name="propertyType">{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="1" step="1" inputMode="numeric" placeholder="Ej. 185000" /></label></div>
       <div className="form-row"><label>Moneda<select name="currency"><option>USD</option><option>ARS</option></select></label><span /></div>
       <label>Notas <span className="optional">opcionales</span><textarea name="notes" rows={3} placeholder="Sólo observaciones propias y necesarias para decidir si revisarlo." /></label>
       {error && <p className="form-error">{error}</p>}
@@ -478,8 +500,10 @@ function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (i
 function OpportunityModal({ isDemo, onClose, onSaved }: { isDemo: boolean; onClose: () => void; onSaved: (data: Dashboard) => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [permission, setPermission] = useState('unknown')
+  const [contactOrigin, setContactOrigin] = useState<Opportunity['contactOrigin']>('not_recorded')
+  const [contactPreference, setContactPreference] = useState<Opportunity['contactPreference']>('not_contacted')
   const [nextStep, setNextStep] = useState('Realizar primer contacto')
+  const needsReviewDate = contactPreference === 'follow_up_agreed' || contactPreference === 'latent'
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
@@ -494,10 +518,13 @@ function OpportunityModal({ isDemo, onClose, onSaved }: { isDemo: boolean; onClo
       <div className="form-row"><label>Nombre o referencia<input name="name" placeholder="Ej. Andrea G. (referido)" autoFocus minLength={2} required /></label><label>Tipo de propiedad<select name="propertyType">{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label></div>
       <div className="form-row"><label>Barrio<select name="neighborhood">{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation"><option>Venta</option><option>Alquiler</option></select></label></div>
       <div className="form-row"><label>Fuente<select name="source">{sources.map((item) => <option key={item}>{item}</option>)}</select></label><label>Enlace original <span className="optional">opcional</span><input name="sourceUrl" type="url" placeholder="https://…" /></label></div>
-      <div className="form-row"><label>Situación de contacto<select name="contactPermission" value={permission} onChange={(event) => { const value = event.target.value; setPermission(value); setNextStep(value === 'do_not_contact' ? 'Revisar sin contactar' : nextStep === 'Revisar sin contactar' ? 'Realizar primer contacto' : nextStep) }}><option value="unknown">Permiso no confirmado</option><option value="inbound">La persona inició la consulta</option><option value="explicit">Dio permiso explícito</option><option value="do_not_contact">No contactar</option></select></label><label>Dato de contacto <span className="optional">opcional</span><input name="contactDetail" placeholder="Teléfono, email o usuario" /></label></div>
-      {permission === 'do_not_contact' && <p className="contact-warning">Esta oportunidad quedará identificada como “No contactar”. Usá el próximo paso para una revisión interna.</p>}
+      <div className="form-row"><label>Origen del dato<select name="contactOrigin" value={contactOrigin} onChange={(event) => setContactOrigin(event.target.value as Opportunity['contactOrigin'])}>{Object.entries(contactOriginLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Dato de contacto <span className="optional">opcional</span><input name="contactDetail" placeholder="Teléfono, email o usuario" /></label></div>
+      <div className="form-row"><label>Preferencia de seguimiento<select name="contactPreference" value={contactPreference} onChange={(event) => { const value = event.target.value as Opportunity['contactPreference']; setContactPreference(value); setNextStep(value === 'do_not_contact' ? 'No contactar' : value === 'follow_up_agreed' ? 'Retomar conversación acordada' : value === 'latent' ? 'Revisar oportunidad latente' : nextStep === 'No contactar' ? 'Realizar primer contacto' : nextStep) }}>{Object.entries(contactPreferenceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{needsReviewDate ? <label>Fecha de revisión<input name="contactFollowUpAt" type="date" defaultValue={localDateValue()} required /></label> : <label>Fecha de revisión <span className="optional">opcional</span><input name="contactFollowUpAt" type="date" /></label>}</div>
+      {contactPreference === 'do_not_contact' && <p className="contact-warning">Esta oportunidad quedará bloqueada para contactos comerciales. La marca no se podrá revertir desde esta pantalla.</p>}
+      {contactPreference === 'latent' && <p className="contact-warning">“Latente” crea una revisión manual, no un contacto programado. Verificá otra vez el aviso y el canal antes de escribir.</p>}
+      <label>Nota de contacto o seguimiento <span className="optional">opcional</span><textarea name="contactPreferenceNote" rows={2} placeholder="Ej. pidió retomar en noviembre; no incluir datos innecesarios." /></label>
       <label>Notas <span className="optional">opcionales</span><textarea name="notes" rows={3} placeholder="Contexto útil, sin copiar contenido innecesario del portal." /></label>
-      <fieldset><legend>Próximo paso obligatorio</legend><div className="form-row"><label>Acción<input name="nextStep" value={nextStep} onChange={(event) => setNextStep(event.target.value)} minLength={2} required readOnly={permission === 'do_not_contact'} /></label><label>Fecha<input name="nextStepDate" type="date" defaultValue={localDateValue()} /></label></div><label>Canal<select name="channel" defaultValue="WhatsApp" disabled={permission === 'do_not_contact'}>{channels.map((item) => <option key={item}>{item}</option>)}</select>{permission === 'do_not_contact' && <input type="hidden" name="channel" value="Sin canal" />}</label></fieldset>
+      <fieldset><legend>Próximo paso obligatorio</legend><div className="form-row"><label>Acción<input name="nextStep" value={nextStep} onChange={(event) => setNextStep(event.target.value)} minLength={2} required readOnly={contactPreference === 'do_not_contact'} /></label><label>Fecha<input name="nextStepDate" type="date" defaultValue={localDateValue()} /></label></div><label>Canal<select name="channel" defaultValue="WhatsApp" disabled={contactPreference === 'do_not_contact'}>{channels.map((item) => <option key={item}>{item}</option>)}</select>{contactPreference === 'do_not_contact' && <input type="hidden" name="channel" value="Sin canal" />}</label></fieldset>
       {error && <p className="form-error">{error}</p>}
       <div className="modal-actions"><button type="button" className="cancel-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={busy} type="submit">{busy ? 'Guardando…' : 'Guardar oportunidad'}</button></div>
     </form>
@@ -508,13 +535,73 @@ function OpportunityDetail({ opportunity, agentName, onClose, onSaved }: { oppor
   const isPortalOpportunity = ['Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro'].includes(opportunity.source)
   return <div className="modal-backdrop detail-backdrop" onMouseDown={onClose}><section className="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(event) => event.stopPropagation()}>
     <button className="modal-close" type="button" onClick={onClose}>×</button>
-    <header className="detail-header"><p className="eyebrow">{opportunity.propertyType} · {opportunity.neighborhood}</p><h2 id="detail-title">{opportunity.name}</h2><div className="detail-badges"><span>{opportunity.status}</span><span className={`permission-chip ${opportunity.contactPermission}`}>{permissionLabels[opportunity.contactPermission]}</span></div></header>
-    <section className="detail-section"><h3>Información de origen</h3><dl className="detail-grid"><div><dt>Operación</dt><dd>{opportunity.operation}</dd></div><div><dt>Fuente</dt><dd>{opportunity.source}</dd></div><div><dt>Contacto</dt><dd>{opportunity.contactDetail || 'No cargado'}</dd></div><div><dt>Detectada</dt><dd>{formatDate(opportunity.createdAt)}</dd></div></dl>{opportunity.sourceUrl && <a className="source-link" href={opportunity.sourceUrl} target="_blank" rel="noreferrer">Abrir fuente original ↗</a>}{opportunity.notes && <p className="detail-notes">{opportunity.notes}</p>}</section>
+    <header className="detail-header"><p className="eyebrow">{opportunity.propertyType} · {opportunity.neighborhood}</p><h2 id="detail-title">{opportunity.name}</h2><div className="detail-badges"><span>{opportunity.status}</span><span className={`permission-chip ${opportunity.contactPreference}`}>{contactPreferenceLabels[opportunity.contactPreference]}</span></div></header>
+    <section className="detail-section"><h3>Información de origen</h3><dl className="detail-grid"><div><dt>Operación</dt><dd>{opportunity.operation}</dd></div><div><dt>Fuente</dt><dd>{opportunity.source}</dd></div><div><dt>Contacto</dt><dd>{opportunity.contactDetail || 'No cargado'}</dd></div><div><dt>Origen del dato</dt><dd>{contactOriginLabels[opportunity.contactOrigin]}</dd></div><div><dt>Seguimiento</dt><dd>{contactPreferenceLabels[opportunity.contactPreference]}</dd></div><div><dt>Detectada</dt><dd>{formatDate(opportunity.createdAt)}</dd></div></dl>{opportunity.sourceUrl && <a className="source-link" href={opportunity.sourceUrl} target="_blank" rel="noreferrer">Abrir fuente original ↗</a>}{opportunity.notes && <p className="detail-notes">{opportunity.notes}</p>}</section>
+    {!opportunity.closedAt && <ContactRecord opportunity={opportunity} onSaved={onSaved} />}
+    {!opportunity.closedAt && <PriceObservations opportunity={opportunity} onSaved={onSaved} />}
     {isPortalOpportunity && !opportunity.closedAt && <ContactPreparation opportunity={opportunity} agentName={agentName} onSaved={onSaved} />}
     {!opportunity.closedAt && <section className="next-callout"><small>PRÓXIMO PASO</small><strong>{opportunity.nextStep}</strong><span>{formatDate(opportunity.nextStepDate)}</span></section>}
     {!opportunity.closedAt && <EventForm opportunity={opportunity} onSaved={onSaved} />}
     <section className="detail-section timeline-section"><h3>Historial comercial</h3><div className="timeline">{opportunity.events.map((event) => <article key={event.id}><span className="timeline-dot" /><div><strong>{event.label}</strong><small>{formatDateTime(event.createdAt)} · {event.channel}</small>{event.notes && <p>{event.notes}</p>}</div></article>)}</div></section>
   </section></div>
+}
+
+function ContactRecord({ opportunity, onSaved }: { opportunity: Opportunity; onSaved: (data: Dashboard, message?: string) => void }) {
+  const [contactDetail, setContactDetail] = useState(opportunity.contactDetail)
+  const [contactOrigin, setContactOrigin] = useState(opportunity.contactOrigin)
+  const [contactPreference, setContactPreference] = useState(opportunity.contactPreference)
+  const [contactFollowUpAt, setContactFollowUpAt] = useState(opportunity.contactFollowUpAt)
+  const [contactPreferenceNote, setContactPreferenceNote] = useState(opportunity.contactPreferenceNote)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const needsReviewDate = contactPreference === 'follow_up_agreed' || contactPreference === 'latent'
+  const immutableNoContact = opportunity.contactPreference === 'do_not_contact'
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setBusy(true)
+    try {
+      const data = await api<Dashboard>(`/api/opportunities/${opportunity.id}/contact-record`, { method: 'PUT', body: JSON.stringify({ contactDetail, contactOrigin, contactPreference, contactFollowUpAt, contactPreferenceNote }) })
+      onSaved(data, contactPreference === 'do_not_contact' ? 'La oportunidad quedó bloqueada para nuevos contactos.' : contactPreference === 'follow_up_agreed' ? 'Seguimiento agendado según lo acordado.' : contactPreference === 'latent' ? 'Oportunidad marcada como latente para revisión manual.' : 'Datos de contacto y preferencia actualizados.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo actualizar el contacto.') } finally { setBusy(false) }
+  }
+
+  return <section className="detail-section contact-record-box"><div className="preparation-heading"><div><h3>Contacto y preferencia</h3><p>Cargá sólo datos obtenidos manualmente. La app no extrae datos ni envía mensajes.</p></div><span className={`preparation-status ${contactPreference}`}>{contactPreferenceLabels[contactPreference]}</span></div>
+    {immutableNoContact ? <p className="contact-warning">La persona pidió no recibir más contacto. Esta marca se conserva y bloquea acciones comerciales.</p> : <form onSubmit={save}>
+      <div className="form-row"><label>Dato de contacto <span className="optional">opcional</span><input value={contactDetail} onChange={(event) => setContactDetail(event.target.value)} maxLength={250} placeholder="Teléfono, email o usuario" /></label><label>Origen del dato<select value={contactOrigin} onChange={(event) => setContactOrigin(event.target.value as Opportunity['contactOrigin'])}>{Object.entries(contactOriginLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+      <div className="form-row"><label>Preferencia de seguimiento<select value={contactPreference} onChange={(event) => setContactPreference(event.target.value as Opportunity['contactPreference'])}>{Object.entries(contactPreferenceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{needsReviewDate ? <label>Fecha de revisión<input value={contactFollowUpAt} onChange={(event) => setContactFollowUpAt(event.target.value)} type="date" required /></label> : <label>Fecha de revisión <span className="optional">opcional</span><input value={contactFollowUpAt} onChange={(event) => setContactFollowUpAt(event.target.value)} type="date" /></label>}</div>
+      {contactPreference === 'latent' && <p className="contact-warning">Una oportunidad latente sólo genera una revisión manual. Antes de otro contacto, verificá nuevamente el aviso, el canal y la preferencia de la persona.</p>}
+      {contactPreference === 'do_not_contact' && <p className="contact-warning">Al guardar, se bloquearán los contactos comerciales y no podrá revertirse desde esta pantalla.</p>}
+      <label>Nota <span className="optional">opcional</span><textarea value={contactPreferenceNote} onChange={(event) => setContactPreferenceNote(event.target.value)} maxLength={1000} rows={2} placeholder="Ej. pidió retomar en noviembre; no incluir datos innecesarios." /></label>
+      {error && <p className="form-error">{error}</p>}
+      <div className="preparation-actions"><button className="secondary-button" type="submit" disabled={busy}>{busy ? 'Guardando…' : 'Guardar contacto y preferencia'}</button></div>
+    </form>}
+  </section>
+}
+
+function PriceObservations({ opportunity, onSaved }: { opportunity: Opportunity; onSaved: (data: Dashboard, message?: string) => void }) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const observations = opportunity.priceObservations ?? []
+  const latest = observations[0]
+  const previous = observations[1]
+  const variation = latest && previous && latest.currency === previous.currency ? latest.amount - previous.amount : null
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setBusy(true)
+    const data = new FormData(event.currentTarget)
+    try {
+      onSaved(await api<Dashboard>(`/api/opportunities/${opportunity.id}/price-observations`, { method: 'POST', body: JSON.stringify(Object.fromEntries(data.entries())) }), 'Precio observado guardado. Revisá la fuente original antes de interpretar la variación.')
+      event.currentTarget.reset()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar el precio.') } finally { setBusy(false) }
+  }
+  return <section className="detail-section price-box"><div className="preparation-heading"><div><h3>Precio observado</h3><p>Registro manual de referencia. No monitorea portales ni concluye por qué cambió un precio.</p></div>{latest && <span className="preparation-status ready">{formatMoney(latest.amount, latest.currency)}</span>}</div>
+    {variation !== null && <p className={variation < 0 ? 'price-variation lower' : variation > 0 ? 'price-variation higher' : 'price-variation'}>{variation < 0 ? '↓ Bajó' : variation > 0 ? '↑ Subió' : '• Sin variación'} respecto de la observación anterior.</p>}
+    {observations.length > 0 && <div className="price-history">{observations.slice(0, 3).map((item) => <span key={item.id}><strong>{formatMoney(item.amount, item.currency)}</strong> · {formatDate(item.observedAt)}</span>)}</div>}
+    <form onSubmit={save}><div className="form-row"><label>Precio<input name="amount" type="number" min="1" step="1" inputMode="numeric" required /></label><label>Moneda<select name="currency" defaultValue={latest?.currency ?? 'USD'}><option>USD</option><option>ARS</option></select></label></div><label>Fecha observada<input name="observedAt" type="date" defaultValue={localDateValue()} required /></label>{error && <p className="form-error">{error}</p>}<div className="preparation-actions"><button className="secondary-button" type="submit" disabled={busy}>{busy ? 'Guardando…' : 'Registrar precio manualmente'}</button></div></form>
+  </section>
 }
 
 function ContactPreparation({ opportunity, agentName, onSaved }: { opportunity: Opportunity; agentName: string; onSaved: (data: Dashboard, message?: string) => void }) {
@@ -565,7 +652,7 @@ function ContactPreparation({ opportunity, agentName, onSaved }: { opportunity: 
 }
 
 function EventForm({ opportunity, onSaved }: { opportunity: Opportunity; onSaved: (data: Dashboard) => void }) {
-  const restricted = opportunity.contactPermission === 'do_not_contact'
+  const restricted = opportunity.contactPreference === 'do_not_contact' || opportunity.contactPermission === 'do_not_contact'
   const [eventType, setEventType] = useState(restricted ? 'opportunity_lost' : 'contact_attempted')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

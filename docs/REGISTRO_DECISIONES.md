@@ -34,6 +34,7 @@
 | D-027 | 2026-10-08 | El perfil inicial permite actualizar sólo el nombre visible y cambiar la contraseña con verificación de la actual; el email queda inmutable hasta incorporar verificación de propiedad. | Evita reasignar silenciosamente una cuenta desde una sesión comprometida; el cambio de contraseña revoca las demás sesiones. | Implementada y verificada localmente |
 | D-028 | 2026-10-08 | La recuperación de contraseña usa enlace temporal hashado, de un solo uso y entregado sólo por correo transaccional. | Evita mostrar secretos en la interfaz o logs; la entrega real queda bloqueada hasta configurar un remitente verificado y una clave de envío restringida. | Implementada; activación externa pendiente |
 | D-029 | 2026-10-08 | Render despliega exclusivamente la rama `main`; `dev` se reserva para desarrollo y validación local. | Cada promoción remota queda ligada a un merge revisable hacia `main`, sin que cambios de trabajo en curso alcancen el servicio público. Reemplaza el uso temporal de `dev` en D-026. | Implementada |
+| D-030 | 2026-10-08 | El seguimiento de una oportunidad se expresa como preferencia operativa —incluido `No contactar` como bloqueo— y no como autorización genérica para insistir. | Diferencia seguimiento acordado, revisión latente, cierre y exclusión; evita convertir la falta de respuesta o una variación de precio en permiso de contacto. | Implementada localmente |
 
 ## Cómo registrar cambios
 
