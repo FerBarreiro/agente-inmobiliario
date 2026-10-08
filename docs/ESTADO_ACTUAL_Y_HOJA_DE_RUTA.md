@@ -1,7 +1,7 @@
 # Estado actual y hoja de ruta
 
 **Fecha de corte:** 2026-10-08  
-**Estado del producto:** prototipo funcional con despliegue Render + Neon preparado; activación y validación externa pendientes.
+**Estado del producto:** prototipo funcional desplegado en un entorno de validación Render + Neon; prueba funcional sintética pendiente.
 **Fuente canónica:** este documento determina qué está operativo y qué sigue siendo diseño.
 
 ## Objetivo vigente
@@ -37,7 +37,7 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Zonaprop/Argenprop | Sin integración | Accesos manuales desde Radar; acuerdo de metadatos sólo como etapa futura. |
 | Mensajería/redes | Sin integración | Registro manual; ningún envío o lectura automática. |
 | Exportación/eliminación | No implementada | Requisito previo al piloto con datos reales. |
-| Producción segura | Preparada, no activada | PostgreSQL por `DATABASE_URL`, configuración Render, origen HTTPS, cabeceras, límites de intentos y health check. Faltan crear recursos, validar el despliegue, backups/recuperación y operación. |
+| Producción segura | Validación externa activa | Render + Neon conectados sobre `dev`, PostgreSQL, HTTPS, health check, cabeceras y límites de intentos verificados. Faltan pruebas funcionales sintéticas, backups/recuperación, operación y controles previos a datos reales. |
 
 ## Arquitectura actual
 
@@ -165,7 +165,7 @@ Presentar un piloto de metadatos de 60–90 días, con alcance limitado, atribuc
 
 ### P0 — Antes de datos personales
 
-1. Crear Neon y Render, configurar el secreto y verificar el primer despliegue sin datos personales.
+1. Recorrer el flujo público completo con cuentas y datos sintéticos, incluida la separación Demo/personal.
 2. Aviso de privacidad y consentimiento versionado.
 3. Retención, baja, exportación y supresión.
 4. Auditoría de acciones sensibles.

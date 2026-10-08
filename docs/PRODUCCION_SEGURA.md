@@ -1,11 +1,11 @@
 # Base de producción segura
 
 **Fecha:** 2026-10-08
-**Estado:** endurecimiento de aplicación y compatibilidad PostgreSQL implementados; falta crear la infraestructura, verificar el primer despliegue y completar los controles operativos antes de cargar datos personales reales.
+**Estado:** endurecimiento de aplicación y validación externa Render + Neon implementados; faltan pruebas funcionales sintéticas y controles operativos antes de cargar datos personales reales.
 
 ## Alcance de este incremento
 
-Se preparó Agente+ para un staging protegido y para evitar configuraciones de producción inseguras por accidente. No se desplegó ningún servidor externo, no se creó una cuenta en un proveedor y no se migraron datos.
+Se preparó Agente+ para un staging protegido y para evitar configuraciones de producción inseguras por accidente. El 2026-10-08 se creó un entorno de validación en Render conectado a Neon, sobre la rama `dev`, sin datos personales reales.
 
 La aplicación usa SQLite en desarrollo local y PostgreSQL cuando se provee `DATABASE_URL`. La ruta acordada para el piloto es Render + Neon; su configuración está en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md). Un staging técnico con SQLite local sigue siendo posible con confirmación explícita, pero no está aprobado para datos personales reales.
 
@@ -63,6 +63,8 @@ El 2026-10-08 se ejecutó una instancia temporal con configuración de producci�
 3. la misma escritura con el origen HTTPS configurado fue aceptada (`201`);
 4. HSTS, bloqueo de frames y política de referencia estuvieron presentes en la respuesta;
 5. compilación de producción, lint y validación de sintaxis del servidor.
+
+También se verificó el despliegue externo de validación: compilación en Render, conexión a Neon, arranque del servidor, health check `/api/health` con respuesta `200` y cabeceras HTTPS de la raíz pública. El detalle está en [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md).
 
 ## Próxima acción necesaria
 

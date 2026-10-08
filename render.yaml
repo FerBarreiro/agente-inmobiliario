@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: agente-inmobiliario
+    name: agente-inmobiliario-dev
     runtime: node
     plan: free
     rootDir: web

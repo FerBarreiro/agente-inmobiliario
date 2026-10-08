@@ -30,6 +30,7 @@
 | D-023 | 2026-10-08 | Un hallazgo en revisión se convierte directamente en oportunidad mediante un único botón. | Reduce fricción sin incorporar contactos: crea el próximo paso de verificación, lo elimina de la bandeja activa del Radar y conserva la barrera previa a cualquier contacto. | Implementada localmente |
 | D-024 | 2026-10-08 | La aplicación exige una configuración explícita y controles de origen para iniciar en producción; SQLite local sólo puede usarse como staging técnico sin datos personales. | Evita despliegues accidentales y prepara HTTPS, cabeceras, rate limiting y health checks mientras se define la migración a una base administrada. | Implementada parcialmente |
 | D-025 | 2026-10-08 | El primer despliegue se realizará con Render como servicio web y Neon PostgreSQL como base administrada. | Mantiene la aplicación Node actual, separa la persistencia del disco efímero y permite guardar la conexión como secreto. SQLite queda limitado a desarrollo o staging técnico. | Preparada; activación pendiente |
+| D-026 | 2026-10-08 | Se activa `agente-inmobiliario-dev` en Render conectado a Neon, sólo para validación con datos sintéticos. | Permite comprobar compilación, conexión, HTTPS y health check sin mezclar el incremento con `main` ni habilitar todavía datos personales reales. | Implementada y verificada |
 
 ## Cómo registrar cambios
 

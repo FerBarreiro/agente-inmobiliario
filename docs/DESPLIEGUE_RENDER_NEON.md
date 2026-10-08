@@ -1,7 +1,7 @@
 # Despliegue del piloto: Render + Neon
 
 **Fecha:** 2026-10-08
-**Estado:** configuración y compatibilidad de PostgreSQL implementadas; falta crear los recursos externos, conectarlos y verificar el primer despliegue.
+**Estado:** despliegue de validación activo en Render sobre `dev`; Neon PostgreSQL conectado. Siguen pendientes la prueba funcional con datos sintéticos, revisión antes de integrar `main` y todos los controles previos a datos personales reales.
 
 ## Decisión
 
@@ -37,7 +37,7 @@ Para futuras pruebas de esquema se debe crear una rama Neon separada; nunca prob
 
 ### 2. Render
 
-Conectar el repositorio `FerBarreiro/agente-inmobiliario` y crear primero el servicio de validación desde el Blueprint `render.yaml` de la rama `dev`. El Blueprint configura:
+Se conectó el repositorio `FerBarreiro/agente-inmobiliario` y se creó el servicio de validación `agente-inmobiliario-dev` desde la rama `dev`. El Blueprint `render.yaml` conserva esta configuración para reproducirla:
 
 | Ajuste | Valor |
 |---|---|
@@ -52,10 +52,10 @@ Render provee `PORT` y, en producción, `RENDER_EXTERNAL_URL`. La aplicación ut
 
 ## Secuencia de activación
 
-1. Crear los dos recursos, sin cargar datos reales todavía.
-2. Pegar la pooled connection string de Neon en `DATABASE_URL` dentro de **Render → Environment** y elegir guardar y desplegar. La contraseña queda sólo en el gestor de secretos de Render.
-3. Esperar un deploy exitoso y comprobar `https://<servicio>.onrender.com/api/health`.
-4. Ingresar a la aplicación, crear una cuenta de prueba y recorrer: hallazgo manual → revisión → oportunidad → checklist de contacto. Confirmar también que Demo y la cuenta personal no ven datos entre sí.
+1. Crear los dos recursos, sin cargar datos reales todavía. **Completado el 2026-10-08.**
+2. Pegar la pooled connection string de Neon en `DATABASE_URL` dentro de **Render → Environment** y elegir guardar y desplegar. La contraseña queda sólo en el gestor de secretos de Render. **Completado.**
+3. Esperar un deploy exitoso y comprobar `https://<servicio>.onrender.com/api/health`. **Completado:** el servicio respondió `{"status":"ok"}`.
+4. Ingresar a la aplicación, crear una cuenta de prueba y recorrer: hallazgo manual → revisión → oportunidad → checklist de contacto. Confirmar también que Demo y la cuenta personal no ven datos entre sí. **Siguiente paso.**
 5. Configurar en Neon una revisión periódica del uso y de las copias/recuperación disponibles en el plan elegido. Documentar quién conserva acceso a Neon y Render.
 6. Tras la validación con datos sintéticos, revisar el cambio, integrar `dev` en `main` y recién entonces cambiar la rama del servicio a `main`.
 7. Antes de utilizar datos personales reales: completar exportación/eliminación, auditoría de acciones sensibles, política de privacidad, retención, recuperación probada y revisión legal local. El despliegue técnico no sustituye esos controles.
@@ -70,7 +70,15 @@ No se debe usar la URL de base de datos en el frontend, ni dar acceso de Neon a 
 
 En una instancia local aislada se verificó que el modo SQLite de desarrollo conserva el flujo de registro, carga de hallazgo de Radar, revisión y conversión a oportunidad. La sintaxis del servidor y de la capa de base compartida fue validada.
 
-La prueba equivalente contra Neon se realizará después de cargar `DATABASE_URL` como secreto en Render. Hasta entonces no se considera validada la conexión externa ni se cargan datos personales.
+El 2026-10-08 se completó la validación externa sin cargar datos personales reales:
+
+- Render compiló y desplegó el commit `bd6457b` de la rama `dev`.
+- Neon PostgreSQL se conectó correctamente: el servidor inició, creó el esquema requerido y sembró sólo los ejemplos Demo.
+- Render confirmó el health check configurado en `/api/health`.
+- `https://agente-inmobiliario-dev.onrender.com/api/health` respondió `{"status":"ok"}`.
+- La raíz pública respondió `200` por HTTPS con CSP, HSTS, bloqueo de frames, `nosniff` y política de referencia restrictiva.
+
+La URL del entorno de validación es <https://agente-inmobiliario-dev.onrender.com>. No se considera producción funcional con datos reales: sigue dedicada a pruebas sintéticas de la rama `dev`.
 
 ## Fuentes operativas
 
