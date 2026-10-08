@@ -35,6 +35,7 @@
 | D-028 | 2026-10-08 | La recuperación de contraseña usa enlace temporal hashado, de un solo uso y entregado sólo por correo transaccional. | Evita mostrar secretos en la interfaz o logs; la entrega real queda bloqueada hasta configurar un remitente verificado y una clave de envío restringida. | Implementada; activación externa pendiente |
 | D-029 | 2026-10-08 | Render despliega exclusivamente la rama `main`; `dev` se reserva para desarrollo y validación local. | Cada promoción remota queda ligada a un merge revisable hacia `main`, sin que cambios de trabajo en curso alcancen el servicio público. Reemplaza el uso temporal de `dev` en D-026. | Implementada |
 | D-030 | 2026-10-08 | El seguimiento de una oportunidad se expresa como preferencia operativa —incluido `No contactar` como bloqueo— y no como autorización genérica para insistir. | Diferencia seguimiento acordado, revisión latente, cierre y exclusión; evita convertir la falta de respuesta o una variación de precio en permiso de contacto. | Implementada localmente |
+| D-031 | 2026-10-08 | Radar puede interpretar localmente una URL aportada por el usuario y debe registrar la procedencia como `manual` o `url_assisted`. | Reduce carga sin abrir ni leer portales; hace visible la diferencia entre una sugerencia desde el texto del enlace y una futura fuente autorizada. | Implementada localmente |
 
 ## Cómo registrar cambios
 

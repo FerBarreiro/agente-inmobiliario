@@ -52,6 +52,10 @@ El botón **Cargar hallazgo** crea una tarjeta privada con:
 
 No admite datos de contacto. Tampoco se deben pegar descripciones completas, fotografías, recorridos virtuales ni otros elementos del aviso que no hagan falta para decidir una revisión.
 
+### Asistencia desde enlace
+
+El usuario puede pegar primero la URL del aviso. La interfaz interpreta sólo ese texto de forma local para sugerir portal y, cuando aparezcan inequívocamente en la propia URL, barrio, operación o tipo de propiedad. No abre la página, no descarga HTML ni copia contenido del portal. La tarjeta queda identificada como **Asistida por URL** y las sugerencias deben revisarse antes de guardar. El diseño y los límites completos están en [`INCREMENTO_ASISTENCIA_ENLACE.md`](INCREMENTO_ASISTENCIA_ENLACE.md).
+
 ### 3. Revisar, descartar o convertir
 
 Cada tarjeta ofrece **Ver oportunidad**, que abre la URL original. Los estados son:

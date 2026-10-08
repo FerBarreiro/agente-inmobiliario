@@ -13,6 +13,7 @@ Existe un prototipo web local con:
 - historial explícito del embudo de captación;
 - búsqueda y filtros;
 - radar manual privado: hallazgos, enlace al aviso original, revisión, descarte y conversión deliberada a oportunidad;
+- asistencia local desde una URL para clasificar el enlace sin abrir ni leer el portal;
 - checklist de contacto para oportunidades de portal y borrador editable que sólo se copia manualmente;
 - datos de contacto manuales, preferencias de seguimiento y precios observados sin monitoreo externo;
 - restricciones de contacto visibles y aplicadas en el servidor.

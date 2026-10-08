@@ -61,6 +61,7 @@ await db.exec(`
     price_amount INTEGER,
     currency TEXT NOT NULL,
     notes TEXT NOT NULL,
+    capture_method TEXT NOT NULL DEFAULT 'manual',
     state TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -114,6 +115,7 @@ await ensureColumn('opportunities', 'contact_origin', "TEXT NOT NULL DEFAULT 'no
 await ensureColumn('opportunities', 'contact_preference', "TEXT NOT NULL DEFAULT 'not_contacted'")
 await ensureColumn('opportunities', 'contact_follow_up_at', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('opportunities', 'contact_preference_note', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('radar_items', 'capture_method', "TEXT NOT NULL DEFAULT 'manual'")
 await ensureColumn('tasks', 'opportunity_id', 'TEXT')
 await ensureColumn('tasks', 'due_at', "TEXT NOT NULL DEFAULT ''")
 await db.prepare("UPDATE opportunities SET contact_preference = 'do_not_contact' WHERE contact_permission = 'do_not_contact' AND contact_preference = 'not_contacted'").run()
@@ -143,6 +145,7 @@ const OPERATIONS = ['Venta', 'Alquiler']
 const PROPERTY_TYPES = ['Departamento', 'Casa', 'PH', 'Terreno', 'Local', 'Otro']
 const SOURCES = ['Carga manual', 'Referido', 'Recorrido de zona', 'Formulario entrante', 'Llamada entrante', 'Enlace compartido', 'Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
 const RADAR_SOURCES = ['Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
+const RADAR_CAPTURE_METHODS = ['manual', 'url_assisted']
 const CONTACT_ORIGINS = ['not_recorded', 'directly_provided', 'inbound', 'prior_relationship', 'listing_to_verify', 'other']
 const CONTACT_PREFERENCES = ['not_contacted', 'follow_up_agreed', 'latent', 'not_continue', 'do_not_contact']
 const CHANNELS = ['WhatsApp', 'Llamada', 'Instagram', 'Email', 'Presencial', 'Sin canal']
@@ -224,15 +227,15 @@ const getOpportunityByExternal = db.prepare('SELECT id FROM opportunities WHERE 
 const radarItemFields = `
   id, title, neighborhood, operation, property_type AS "propertyType", source,
   source_url AS "sourceUrl", price_amount AS "priceAmount", currency, notes, state,
-  created_at AS "createdAt", updated_at AS "updatedAt"
+  capture_method AS "captureMethod", created_at AS "createdAt", updated_at AS "updatedAt"
 `
 const listRadarItems = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE user_id = ? ORDER BY updated_at DESC`)
 const getRadarItem = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE id = ? AND user_id = ?`)
 const insertRadarItem = db.prepare(`
   INSERT INTO radar_items (
     id, user_id, title, neighborhood, operation, property_type, source, source_url,
-    price_amount, currency, notes, state, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    price_amount, currency, notes, capture_method, state, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
 const updateRadarItemState = db.prepare('UPDATE radar_items SET state = ?, updated_at = ? WHERE id = ? AND user_id = ?')
 const insertOpportunity = db.prepare(`
@@ -629,12 +632,14 @@ const server = createServer(async (request, response) => {
       const priceAmount = priceRaw ? Number(priceRaw) : null
       const currency = clean(body.currency || 'USD', 10)
       const notes = clean(body.notes, 1200)
+      const captureMethod = clean(body.captureMethod || 'manual', 30)
       if (title.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !RADAR_SOURCES.includes(source) || !validUrl(sourceUrl) || !sourceUrl) return sendJson(response, 400, { error: 'Completá referencia, zona, operación, tipo, portal y enlace válido.' })
       if (priceAmount !== null && (!Number.isInteger(priceAmount) || priceAmount <= 0)) return sendJson(response, 400, { error: 'El precio debe ser un número entero positivo.' })
       if (!['USD', 'ARS'].includes(currency)) return sendJson(response, 400, { error: 'Elegí una moneda válida.' })
+      if (!RADAR_CAPTURE_METHODS.includes(captureMethod)) return sendJson(response, 400, { error: 'El método de carga no es válido.' })
       const id = randomUUID()
       const createdAt = now()
-      await insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, 'detected', createdAt, createdAt)
+      await insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, 'detected', createdAt, createdAt)
       return sendJson(response, 201, { items: await listRadarItems.all(user.id) })
     }
 
@@ -668,7 +673,7 @@ const server = createServer(async (request, response) => {
       await withTransaction(async () => {
         await insertOpportunity.run(opportunityId, user.id, item.title, item.neighborhood, item.operation, 'Detectada', 'Hallazgo manual revisado; pendiente de verificación antes de cualquier contacto.', 58, nextStep, createdAt, item.propertyType, item.source, item.sourceUrl, '', 'unknown', notes, nextStepDate, createdAt, null, '', '', 'not_recorded', 'not_contacted', '', '')
         if (item.priceAmount !== null) await insertPriceObservation.run(randomUUID(), user.id, opportunityId, item.priceAmount, item.currency, createdAt.slice(0, 10), createdAt)
-        await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. Sin datos de contacto.`, 'Sin canal', createdAt)
+        await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. ${item.captureMethod === 'url_assisted' ? 'Enlace clasificado localmente; contenido pendiente de revisión.' : 'Carga manual.'} Sin datos de contacto.`, 'Sin canal', createdAt)
         await addTask(user.id, opportunityId, nextStep, item.title, nextStepDate, 'Sin canal')
         await updateRadarItemState.run('converted', createdAt, item.id, user.id)
       })

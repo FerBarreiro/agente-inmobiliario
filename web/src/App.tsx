@@ -71,6 +71,7 @@ type Dashboard = { user: User; tasks: Task[]; opportunities: Opportunity[] }
 type AuthMode = 'login' | 'register'
 type View = 'Hoy' | 'Radar' | 'Oportunidades' | 'Contactos' | 'Campañas' | 'Métricas'
 type RadarState = 'detected' | 'reviewing' | 'converted' | 'discarded'
+type RadarCaptureMethod = 'manual' | 'url_assisted'
 type RadarItem = {
   id: string
   title: string
@@ -82,6 +83,7 @@ type RadarItem = {
   priceAmount: number | null
   currency: 'USD' | 'ARS'
   notes: string
+  captureMethod: RadarCaptureMethod
   state: RadarState
   createdAt: string
   updatedAt: string
@@ -115,6 +117,32 @@ const contactPreferenceLabels = {
   latent: 'Latente',
   not_continue: 'No continuar',
   do_not_contact: 'No contactar',
+}
+const radarCaptureMethodLabels: Record<RadarCaptureMethod, string> = {
+  manual: 'Carga manual',
+  url_assisted: 'Asistida por URL',
+}
+
+function normalizeUrlHint(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[-_/]+/g, ' ').replace(/\s+/g, ' ')
+}
+
+function inferRadarUrl(urlValue: string) {
+  try {
+    const url = new URL(urlValue)
+    const host = url.hostname.toLowerCase()
+    const source = host.endsWith('zonaprop.com.ar') ? 'Zonaprop' : host.endsWith('argenprop.com') ? 'Argenprop' : host.includes('mercadolibre.com') ? 'Mercado Libre' : 'Otro'
+    const hint = normalizeUrlHint(`${url.pathname} ${url.search}`)
+    const neighborhood = neighborhoods.find((item) => hint.includes(normalizeUrlHint(item)))
+    const operation = hint.includes('alquiler') ? 'Alquiler' : hint.includes('venta') ? 'Venta' : undefined
+    const propertyType = hint.includes('departamento') || hint.includes('depto') ? 'Departamento'
+      : hint.includes('casa') ? 'Casa'
+        : /(^| )ph( |$)/.test(hint) ? 'PH'
+          : hint.includes('terreno') || hint.includes('lote') ? 'Terreno'
+            : hint.includes('local') ? 'Local' : undefined
+    const reference = `${url.pathname}${url.search}`.match(/(?:MLA[-_]?|propiedad(?:es)?[-_/]?)(\d{6,})/i)?.[0]?.toUpperCase()
+    return { source, neighborhood, operation, propertyType, title: `Aviso para revisar · ${source}${reference ? ` · ${reference}` : ''}` }
+  } catch { return null }
 }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -362,14 +390,14 @@ function RadarView({ isCreateOpen, onCloseCreate, onDashboard }: { isCreateOpen:
 
   return <section className="radar-page">
     <section className="panel radar-search-panel">
-      <div className="radar-intro"><div><p className="eyebrow">RADAR MANUAL · SIN INTEGRACIONES</p><h2>Revisá avisos sin copiar catálogos</h2><p>Abrí un portal, encontrá el aviso como usuario y cargá sólo la referencia necesaria. Agente+ no consulta, extrae ni almacena resultados de terceros.</p></div><span className="radar-mode manual">Carga manual</span></div>
+      <div className="radar-intro"><div><p className="eyebrow">RADAR PRIVADO · SIN LECTURA DE PORTALES</p><h2>Revisá avisos sin copiar catálogos</h2><p>Abrí un portal como usuario y pegá el enlace. Agente+ puede interpretar localmente el texto de esa URL para sugerir datos, pero no abre, consulta ni extrae el contenido del portal.</p></div><span className="radar-mode manual">Enlace asistido</span></div>
       <div className="portal-launchers" aria-label="Portales sugeridos"><a href="https://inmuebles.mercadolibre.com.ar/dueno-directo/" target="_blank" rel="noreferrer">Abrir Mercado Libre ↗</a><a href="https://www.zonaprop.com.ar/" target="_blank" rel="noreferrer">Abrir Zonaprop ↗</a><a href="https://www.argenprop.com/" target="_blank" rel="noreferrer">Abrir Argenprop ↗</a></div>
     </section>
     <div className="radar-notice"><span>i</span><p>Usá los portales en forma manual y respetá las restricciones de cada aviso. El Radar no guarda teléfonos, fotos ni descripciones completas.</p></div>
     {error && <p className="form-error radar-error" role="alert">{error}</p>}
     <section className="radar-results-heading"><div><p className="eyebrow">TU BANDEJA PRIVADA</p><h2>{visibleItems.length} {visibleItems.length === 1 ? 'hallazgo' : 'hallazgos'}</h2></div><select aria-label="Filtrar hallazgos" value={filter} onChange={(event) => setFilter(event.target.value as 'all' | RadarState)}><option value="all">Todos</option><option value="detected">Hallazgos</option><option value="reviewing">En revisión</option><option value="discarded">Descartadas</option></select></section>
     <div className="radar-grid">{visibleItems.map((item) => <article className="radar-card manual-card" key={item.id}>
-      <div className="radar-card-top"><span>{item.source.toUpperCase()}</span><small>{stateLabels[item.state]}</small></div>
+      <div className="radar-card-top"><span>{item.source.toUpperCase()}</span><small>{radarCaptureMethodLabels[item.captureMethod]} · {stateLabels[item.state]}</small></div>
       <h3>{item.title}</h3><p className="radar-location">{item.neighborhood} · {item.propertyType} · {item.operation}</p>
       {item.priceAmount !== null && <strong className="radar-price">{formatMoney(item.priceAmount, item.currency)}</strong>}
       {item.notes && <p className="radar-card-notes">{item.notes}</p>}
@@ -475,6 +503,39 @@ function ProfileModal({ user, onClose, onSaved }: { user: User; onClose: () => v
 function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (items: RadarItem[]) => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [title, setTitle] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
+  const [source, setSource] = useState('Otro')
+  const [neighborhood, setNeighborhood] = useState(neighborhoods[0])
+  const [operation, setOperation] = useState('Venta')
+  const [propertyType, setPropertyType] = useState(propertyTypes[0])
+  const [captureMethod, setCaptureMethod] = useState<RadarCaptureMethod>('manual')
+  const [urlSuggestion, setUrlSuggestion] = useState<ReturnType<typeof inferRadarUrl>>(null)
+  const [titleEdited, setTitleEdited] = useState(false)
+
+  const updateFromUrl = (value: string) => {
+    setSourceUrl(value)
+    const suggestion = inferRadarUrl(value)
+    setUrlSuggestion(suggestion)
+    if (!suggestion) { setCaptureMethod('manual'); return }
+    setCaptureMethod('url_assisted')
+    setSource(suggestion.source)
+    if (suggestion.neighborhood) setNeighborhood(suggestion.neighborhood)
+    if (suggestion.operation) setOperation(suggestion.operation)
+    if (suggestion.propertyType) setPropertyType(suggestion.propertyType)
+    if (!titleEdited) setTitle(suggestion.title)
+  }
+
+  const switchToManualEntry = () => {
+    setCaptureMethod('manual')
+    setUrlSuggestion(null)
+    setSource('Otro')
+    setNeighborhood(neighborhoods[0])
+    setOperation('Venta')
+    setPropertyType(propertyTypes[0])
+    if (!titleEdited) setTitle('')
+  }
+
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
@@ -483,12 +544,14 @@ function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (i
     try { onSaved((await api<RadarItemsResponse>('/api/radar-items', { method: 'POST', body: JSON.stringify(Object.fromEntries(data.entries())) })).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar el hallazgo.') } finally { setBusy(false) }
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="radar-modal-title" onMouseDown={(event) => event.stopPropagation()}>
-    <button className="modal-close" type="button" onClick={onClose}>×</button><p className="eyebrow">CARGA MANUAL · SIN CONTACTOS</p><h2 id="radar-modal-title">Cargar hallazgo</h2><p className="modal-description">Anotá únicamente lo que necesitás para volver a evaluar el aviso. No copies fotos, descripciones completas ni datos personales.</p>
+    <button className="modal-close" type="button" onClick={onClose}>×</button><p className="eyebrow">CARGA PRIVADA · SIN CONTACTOS</p><h2 id="radar-modal-title">Cargar hallazgo</h2><p className="modal-description">Pegá primero el enlace. La app interpreta localmente el texto de la URL para sugerir datos; no abre ni lee el aviso del portal. No copies fotos, descripciones completas ni datos personales.</p>
     <form onSubmit={save}>
-      <div className="form-row"><label>Referencia del aviso<input name="title" placeholder="Ej. Depto 3 amb. con balcón" autoFocus minLength={2} required /></label><label>Portal<select name="source"><option>Mercado Libre</option><option>Zonaprop</option><option>Argenprop</option><option>Otro</option></select></label></div>
-      <label>Enlace de la publicación<input name="sourceUrl" type="url" placeholder="https://…" required /></label>
-      <div className="form-row"><label>Barrio<select name="neighborhood">{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation"><option>Venta</option><option>Alquiler</option></select></label></div>
-      <div className="form-row"><label>Tipo de propiedad<select name="propertyType">{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="1" step="1" inputMode="numeric" placeholder="Ej. 185000" /></label></div>
+      <label>Enlace de la publicación<input name="sourceUrl" value={sourceUrl} onChange={(event) => updateFromUrl(event.target.value)} type="url" placeholder="https://…" autoFocus required /></label>
+      {urlSuggestion && <p className="url-assist-notice"><strong>Asistencia desde enlace</strong> · {source} detectado{urlSuggestion.neighborhood ? ` · ${urlSuggestion.neighborhood}` : ''}{urlSuggestion.operation ? ` · ${urlSuggestion.operation}` : ''}. Verificá las sugerencias frente al aviso original antes de guardar. <button className="text-button" type="button" onClick={switchToManualEntry}>Completar manualmente</button></p>}
+      <input name="captureMethod" type="hidden" value={captureMethod} />
+      <div className="form-row"><label>Referencia del aviso<input name="title" value={title} onChange={(event) => { setTitle(event.target.value); setTitleEdited(true) }} placeholder="Ej. Depto 3 amb. con balcón" minLength={2} required /></label><label>Portal<select name="source" value={source} onChange={(event) => setSource(event.target.value)}><option>Mercado Libre</option><option>Zonaprop</option><option>Argenprop</option><option>Otro</option></select></label></div>
+      <div className="form-row"><label>Barrio<select name="neighborhood" value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)}>{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation" value={operation} onChange={(event) => setOperation(event.target.value)}><option>Venta</option><option>Alquiler</option></select></label></div>
+      <div className="form-row"><label>Tipo de propiedad<select name="propertyType" value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="1" step="1" inputMode="numeric" placeholder="Ej. 185000" /></label></div>
       <div className="form-row"><label>Moneda<select name="currency"><option>USD</option><option>ARS</option></select></label><span /></div>
       <label>Notas <span className="optional">opcionales</span><textarea name="notes" rows={3} placeholder="Sólo observaciones propias y necesarias para decidir si revisarlo." /></label>
       {error && <p className="form-error">{error}</p>}

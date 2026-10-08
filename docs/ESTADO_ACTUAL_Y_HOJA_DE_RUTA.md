@@ -35,7 +35,7 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Captación entrante | No implementada | Requiere formulario público, consentimiento y protección antiabuso. |
 | Goal Engine | No implementado | La meta demo es ilustrativa; no hay cálculo configurable. |
 | Métricas | Datos preparados | Se registran eventos; todavía no existe tablero ni ratios confiables. |
-| Radar de oportunidades | Implementado manualmente | Hallazgos privados, enlace original, revisión, descarte y conversión directa a oportunidad sin datos de contacto. Sin conexión a portales. |
+| Radar de oportunidades | Implementado manualmente | Hallazgos privados, enlace original, asistencia local para clasificar una URL, revisión, descarte y conversión directa a oportunidad sin datos de contacto. Sin conexión ni lectura de portales. |
 | API de Mercado Libre | Diferida | El Radar manual sigue activo; requiere consulta escrita que confirme el uso de captación, además de OAuth, seguridad y evidencia de pilotos. |
 | Zonaprop/Argenprop | Sin integración | Accesos manuales desde Radar; acuerdo de metadatos sólo como etapa futura. |
 | Mensajería/redes | Sin integración | Registro manual; ningún envío o lectura automática. |
