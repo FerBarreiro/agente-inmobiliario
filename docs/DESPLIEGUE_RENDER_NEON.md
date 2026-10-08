@@ -42,7 +42,7 @@ Conectar el repositorio `FerBarreiro/agente-inmobiliario` y crear primero el ser
 | Ajuste | Valor |
 |---|---|
 | Directorio raíz | `web` |
-| Build | `npm ci && npm run build` |
+| Build | `npm ci --include=dev && npm run build` |
 | Inicio | `npm start` |
 | Health check | `/api/health` |
 | Plan inicial | Free |
