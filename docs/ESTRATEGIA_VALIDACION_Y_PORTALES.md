@@ -9,9 +9,9 @@
 El desarrollo avanzará en este orden:
 
 1. **Carga manual:** el agente incorpora oportunidades, enlaces y resultados de contacto bajo su control.
-2. **Captación entrante:** campañas, formularios y consultas voluntarias generan oportunidades con fuente, fecha y constancia de consentimiento.
-3. **API oficial de Mercado Libre:** prueba técnica limitada a los recursos y usos autorizados por su documentación y términos vigentes.
-4. **Acuerdo con otro portal:** solo después de demostrar uso real con tres pilotos activos.
+2. **Radar manual:** el agente navega los portales normalmente y organiza enlaces que carga por decisión propia, sin recibir resultados de terceros.
+3. **Captación entrante:** campañas, formularios y consultas voluntarias generan oportunidades con fuente, fecha y constancia de consentimiento.
+4. **Acuerdo o API oficial:** solo después de demostrar uso real con tres pilotos activos y recibir autorización escrita.
 
 No se implementarán scrapers, extracción de teléfonos o emails, perfiles paralelos de propietarios, mensajes automáticos ni reutilización comercial de contenido sin permiso escrito.
 
@@ -45,32 +45,27 @@ Campaña por barrio o necesidad
 
 Las campañas iniciales se concentrarán en Núñez, Saavedra, Villa Urquiza, Coghlan y Belgrano. Todo contacto comercial será revisado y ejecutado por el agente; el sistema no enviará mensajes por sí solo durante el piloto.
 
-## Etapa 3 — API oficial de Mercado Libre
+## Etapa 3 — Radar manual de portales
 
-La integración comenzará como un experimento controlado de **radar de mercado**, no como una base de contactos.
+El Radar actual es una bandeja privada de referencias, no una integración ni una base de contactos.
 
-**Avance al 2026-10-08:** el modo Demo, los filtros, el guardado manual, la deduplicación y el adaptador de servidor están implementados. Los datos reales continúan desactivados hasta completar aplicación registrada, OAuth y validación del uso. Ver [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md).
+**Avance al 2026-10-08:** el agente puede abrir Mercado Libre, Zonaprop o Argenprop en una pestaña nueva, cargar manualmente un enlace y sus observaciones mínimas, marcar el hallazgo para revisión, descartarlo o convertirlo en oportunidad. No hay API, scraping, resultados automáticos ni contactos en Radar. Ver [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md).
 
 ### Alcance inicial
 
-- usar una aplicación registrada y autenticación oficial;
-- consultar únicamente endpoints y campos habilitados para la aplicación;
-- filtrar inmuebles por zona, tipo de operación y atributos permitidos;
-- mostrar metadatos mínimos y un enlace profundo a la publicación original;
-- identificar la fuente y la fecha de consulta;
-- aplicar límites de frecuencia, caché y retención según las reglas vigentes;
-- requerir acción humana para guardar una publicación como oportunidad;
+- abrir el portal de forma humana, desde su propio enlace externo;
+- cargar sólo referencia, fuente, URL, barrio, operación, tipo, precio orientativo y observaciones propias;
+- conservar el enlace profundo a la publicación original;
+- requerir acción humana para marcar, descartar o convertir un hallazgo;
 - no revelar ni inferir teléfonos, emails, dirección exacta u otros datos personales no entregados expresamente para ese uso;
 - no automatizar mensajes al anunciante.
 
-La documentación oficial de Mercado Libre describe búsquedas de ítems activos, selección de campos y localización de inmuebles por ubicación. Antes de construir el conector se deberán revisar nuevamente sus términos, autorización, cuotas, políticas de almacenamiento y uso comercial, porque pueden cambiar.
+La navegación manual no sustituye los términos de cada portal: el agente debe revisar el aviso original y sus restricciones. Antes de construir cualquier conector se deberán revisar nuevamente los términos, la autorización, las cuotas, las políticas de almacenamiento y el uso comercial aplicables.
 
 ### Qué se medirá
 
-- búsquedas realizadas y resultados relevantes;
-- publicaciones abiertas en el portal desde Agente+;
-- resultados guardados por el agente;
-- duplicados y falsos positivos;
+- hallazgos cargados y avisos abiertos desde Agente+;
+- hallazgos revisados, descartados y convertidos;
 - oportunidades que reciben un próximo paso legítimo;
 - tiempo ahorrado respecto de la navegación manual;
 - incidentes, reclamos, bajas o restricciones detectadas.
@@ -83,7 +78,7 @@ Se considerará que existe evidencia suficiente cuando se cumplan conjuntamente 
 2. Cada piloto utilizó el producto durante al menos cuatro semanas y volvió a la vista **Hoy** en tres de las últimas cuatro semanas.
 3. Existe actividad real y auditable de carga, priorización y seguimiento, no solo cuentas creadas.
 4. Se puede mostrar el embudo agregado desde oportunidad detectada hasta conversación, tasación y captación, sin exponer datos personales.
-5. La prueba con Mercado Libre permite informar búsquedas, relevancia, clics de salida, oportunidades guardadas y tiempo ahorrado.
+5. El Radar manual permite informar hallazgos, revisiones, clics de salida, oportunidades creadas y tiempo ahorrado.
 6. No existen incidentes de seguridad, automatización no autorizada ni reclamos de contacto pendientes.
 7. Hay un resumen de aprendizajes y una definición comprobada de los metadatos mínimos que los agentes necesitan.
 

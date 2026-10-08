@@ -2,13 +2,25 @@ import { createServer } from 'node:http'
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { extname, join } from 'node:path'
+import { extname, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { DatabaseSync } from 'node:sqlite'
 
 const scrypt = promisify(scryptCallback)
 const root = process.cwd()
-const dataDirectory = join(root, 'data')
+const isProduction = process.env.NODE_ENV === 'production'
+const configuredAppOrigin = process.env.APP_ORIGIN ?? ''
+let appOrigin = ''
+if (configuredAppOrigin) {
+  try { appOrigin = new URL(configuredAppOrigin).origin } catch { throw new Error('APP_ORIGIN debe ser una URL absoluta válida.') }
+}
+if (isProduction && (!appOrigin || !appOrigin.startsWith('https://'))) throw new Error('En producción APP_ORIGIN debe usar HTTPS, por ejemplo https://app.ejemplo.com.')
+
+const configuredDataDirectory = process.env.DATA_DIRECTORY ?? ''
+if (isProduction && !configuredDataDirectory) throw new Error('En producción definí DATA_DIRECTORY en un volumen persistente y restringido.')
+if (isProduction && !isAbsolute(configuredDataDirectory)) throw new Error('DATA_DIRECTORY debe ser una ruta absoluta en producción.')
+if (isProduction && process.env.ALLOW_LOCAL_SQLITE_IN_PRODUCTION !== '1') throw new Error('SQLite local no está aprobado para datos personales. Para un staging sin datos reales, confirmá ALLOW_LOCAL_SQLITE_IN_PRODUCTION=1.')
+const dataDirectory = configuredDataDirectory ? resolve(configuredDataDirectory) : join(root, 'data')
 mkdirSync(dataDirectory, { recursive: true })
 
 const db = new DatabaseSync(join(dataDirectory, 'agente.sqlite'))
@@ -34,6 +46,22 @@ db.exec(`
     title TEXT NOT NULL, contact TEXT NOT NULL, due TEXT NOT NULL, channel TEXT NOT NULL,
     state TEXT NOT NULL, priority TEXT NOT NULL, created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS radar_items (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    neighborhood TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    property_type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    price_amount INTEGER,
+    currency TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `)
 
 function ensureColumn(table, column, definition) {
@@ -52,6 +80,14 @@ ensureColumn('opportunities', 'updated_at', "TEXT NOT NULL DEFAULT ''")
 ensureColumn('opportunities', 'closed_at', 'TEXT')
 ensureColumn('opportunities', 'external_source', "TEXT NOT NULL DEFAULT ''")
 ensureColumn('opportunities', 'external_id', "TEXT NOT NULL DEFAULT ''")
+ensureColumn('opportunities', 'contact_source_reviewed', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('opportunities', 'contact_listing_policy', "TEXT NOT NULL DEFAULT 'not_started'")
+ensureColumn('opportunities', 'no_llame_checked_at', "TEXT NOT NULL DEFAULT ''")
+ensureColumn('opportunities', 'planned_contact_channel', "TEXT NOT NULL DEFAULT 'Sin canal'")
+ensureColumn('opportunities', 'contact_draft', "TEXT NOT NULL DEFAULT ''")
+ensureColumn('opportunities', 'contact_preparation_notes', "TEXT NOT NULL DEFAULT ''")
+ensureColumn('opportunities', 'contact_preparation_status', "TEXT NOT NULL DEFAULT 'not_started'")
+ensureColumn('opportunities', 'contact_preparation_updated_at', "TEXT NOT NULL DEFAULT ''")
 ensureColumn('tasks', 'opportunity_id', 'TEXT')
 ensureColumn('tasks', 'due_at', "TEXT NOT NULL DEFAULT ''")
 
@@ -70,31 +106,20 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS opportunities_external_unique ON opportunities(user_id, external_source, external_id) WHERE external_id <> '';
   CREATE INDEX IF NOT EXISTS tasks_user_index ON tasks(user_id, state, created_at DESC);
   CREATE INDEX IF NOT EXISTS events_opportunity_index ON opportunity_events(opportunity_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS radar_items_user_index ON radar_items(user_id, state, updated_at DESC);
 `)
 
 const NEIGHBORHOODS = ['Núñez', 'Saavedra', 'Villa Urquiza', 'Coghlan', 'Belgrano']
 const OPERATIONS = ['Venta', 'Alquiler']
 const PROPERTY_TYPES = ['Departamento', 'Casa', 'PH', 'Terreno', 'Local', 'Otro']
-const SOURCES = ['Referido', 'Recorrido de zona', 'Formulario entrante', 'Llamada entrante', 'Enlace compartido', 'Mercado Libre', 'Otro']
+const SOURCES = ['Carga manual', 'Referido', 'Recorrido de zona', 'Formulario entrante', 'Llamada entrante', 'Enlace compartido', 'Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
+const RADAR_SOURCES = ['Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
 const PERMISSIONS = ['unknown', 'inbound', 'explicit', 'do_not_contact']
 const CHANNELS = ['WhatsApp', 'Llamada', 'Instagram', 'Email', 'Presencial', 'Sin canal']
-const RADAR_BOUNDS = {
-  'Núñez': { lat: '-34.558_-34.529', lon: '-58.491_-58.445' },
-  'Saavedra': { lat: '-34.570_-34.536', lon: '-58.519_-58.469' },
-  'Villa Urquiza': { lat: '-34.594_-34.555', lon: '-58.513_-58.471' },
-  'Coghlan': { lat: '-34.577_-34.550', lon: '-58.486_-58.459' },
-  'Belgrano': { lat: '-34.580_-34.540', lon: '-58.473_-58.421' },
-}
-const RADAR_DEMO = [
-  { externalId: 'DEMO-NU-001', title: 'Departamento 3 ambientes con balcón', neighborhood: 'Núñez', operation: 'Venta', propertyType: 'Departamento', price: 168000, currency: 'USD', rooms: 3, area: 72, publishedAt: '2026-10-07T13:30:00.000Z' },
-  { externalId: 'DEMO-NU-002', title: 'PH con patio y entrada independiente', neighborhood: 'Núñez', operation: 'Venta', propertyType: 'PH', price: 219000, currency: 'USD', rooms: 4, area: 108, publishedAt: '2026-10-06T18:15:00.000Z' },
-  { externalId: 'DEMO-SA-001', title: 'Casa de cuatro ambientes en zona residencial', neighborhood: 'Saavedra', operation: 'Venta', propertyType: 'Casa', price: 295000, currency: 'USD', rooms: 4, area: 165, publishedAt: '2026-10-07T10:05:00.000Z' },
-  { externalId: 'DEMO-SA-002', title: 'Departamento 2 ambientes luminoso', neighborhood: 'Saavedra', operation: 'Alquiler', propertyType: 'Departamento', price: 780000, currency: 'ARS', rooms: 2, area: 48, publishedAt: '2026-10-05T16:45:00.000Z' },
-  { externalId: 'DEMO-VU-001', title: 'Departamento 3 ambientes cerca del subte', neighborhood: 'Villa Urquiza', operation: 'Venta', propertyType: 'Departamento', price: 142000, currency: 'USD', rooms: 3, area: 66, publishedAt: '2026-10-08T09:20:00.000Z' },
-  { externalId: 'DEMO-CO-001', title: 'PH 3 ambientes con terraza', neighborhood: 'Coghlan', operation: 'Venta', propertyType: 'PH', price: 185000, currency: 'USD', rooms: 3, area: 91, publishedAt: '2026-10-04T12:00:00.000Z' },
-  { externalId: 'DEMO-BE-001', title: 'Departamento 4 ambientes con cochera', neighborhood: 'Belgrano', operation: 'Venta', propertyType: 'Departamento', price: 310000, currency: 'USD', rooms: 4, area: 118, publishedAt: '2026-10-08T08:10:00.000Z' },
-  { externalId: 'DEMO-BE-002', title: 'Departamento 2 ambientes amoblado', neighborhood: 'Belgrano', operation: 'Alquiler', propertyType: 'Departamento', price: 950000, currency: 'ARS', rooms: 2, area: 51, publishedAt: '2026-10-06T14:30:00.000Z' },
-]
+const CONTACT_POLICIES = ['not_started', 'allows_agents', 'no_agents']
+// "Otro" is deliberately included: a manually reviewed link from an
+// unclassified portal should receive the same conservative contact controls.
+const PORTAL_SOURCES = ['Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
 const EVENTS = {
   contact_attempted: { label: 'Contacto intentado', status: 'Contacto intentado', closed: false },
   conversation_started: { label: 'Conversación iniciada', status: 'En conversación', closed: false },
@@ -112,6 +137,13 @@ const validUrl = (value) => {
   if (!value) return true
   try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
 }
+const validLocalDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime())
+function preparationStatus({ sourceReviewed, listingPolicy, channel, noLlameCheckedAt }) {
+  if (listingPolicy === 'no_agents') return 'blocked'
+  if (!sourceReviewed || listingPolicy !== 'allows_agents' || !['WhatsApp', 'Llamada', 'Instagram', 'Email'].includes(channel)) return 'pending'
+  if (['WhatsApp', 'Llamada'].includes(channel) && !validLocalDate(noLlameCheckedAt)) return 'pending'
+  return 'ready'
+}
 const withTransaction = (operation) => {
   db.exec('BEGIN')
   try { const result = operation(); db.exec('COMMIT'); return result } catch (error) { db.exec('ROLLBACK'); throw error }
@@ -123,19 +155,38 @@ const insertUser = db.prepare('INSERT INTO users (id, email, display_name, passw
 const insertSession = db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
 const deleteSession = db.prepare('DELETE FROM sessions WHERE token_hash = ?')
 const getSessionUser = db.prepare('SELECT u.id, u.email, u.display_name, u.role, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
+const deleteExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?')
 const opportunityFields = `
   id, name, neighborhood, operation, status, reason, score,
   next_step AS nextStep, property_type AS propertyType, source, source_url AS sourceUrl,
   contact_detail AS contactDetail, contact_permission AS contactPermission, notes,
   next_step_date AS nextStepDate, created_at AS createdAt, updated_at AS updatedAt,
-  closed_at AS closedAt, external_source AS externalSource, external_id AS externalId
+  closed_at AS closedAt, external_source AS externalSource, external_id AS externalId,
+  contact_source_reviewed AS contactSourceReviewed, contact_listing_policy AS contactListingPolicy,
+  no_llame_checked_at AS noLlameCheckedAt, planned_contact_channel AS plannedContactChannel,
+  contact_draft AS contactDraft, contact_preparation_notes AS contactPreparationNotes,
+  contact_preparation_status AS contactPreparationStatus,
+  contact_preparation_updated_at AS contactPreparationUpdatedAt
 `
 const listOpportunities = db.prepare(`SELECT ${opportunityFields} FROM opportunities WHERE user_id = ? ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC`)
 const getOpportunity = db.prepare(`SELECT ${opportunityFields} FROM opportunities WHERE id = ? AND user_id = ?`)
 const listTasks = db.prepare("SELECT id, opportunity_id AS opportunityId, title, contact, due, due_at AS dueAt, channel, state, priority FROM tasks WHERE user_id = ? ORDER BY state ASC, COALESCE(NULLIF(due_at, ''), created_at) ASC")
 const listEvents = db.prepare('SELECT id, opportunity_id AS opportunityId, event_type AS eventType, label, notes, channel, created_at AS createdAt FROM opportunity_events WHERE user_id = ? ORDER BY created_at DESC')
-const listSavedExternalIds = db.prepare("SELECT external_id AS externalId FROM opportunities WHERE user_id = ? AND external_source = 'mercadolibre' AND external_id <> ''")
 const getOpportunityByExternal = db.prepare('SELECT id FROM opportunities WHERE user_id = ? AND external_source = ? AND external_id = ?')
+const radarItemFields = `
+  id, title, neighborhood, operation, property_type AS propertyType, source,
+  source_url AS sourceUrl, price_amount AS priceAmount, currency, notes, state,
+  created_at AS createdAt, updated_at AS updatedAt
+`
+const listRadarItems = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE user_id = ? ORDER BY updated_at DESC`)
+const getRadarItem = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE id = ? AND user_id = ?`)
+const insertRadarItem = db.prepare(`
+  INSERT INTO radar_items (
+    id, user_id, title, neighborhood, operation, property_type, source, source_url,
+    price_amount, currency, notes, state, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`)
+const updateRadarItemState = db.prepare('UPDATE radar_items SET state = ?, updated_at = ? WHERE id = ? AND user_id = ?')
 const insertOpportunity = db.prepare(`
   INSERT INTO opportunities (
     id, user_id, name, neighborhood, operation, status, reason, score, next_step, created_at,
@@ -146,6 +197,13 @@ const insertOpportunity = db.prepare(`
 const insertTask = db.prepare('INSERT INTO tasks (id, user_id, title, contact, due, channel, state, priority, created_at, opportunity_id, due_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 const insertEvent = db.prepare('INSERT INTO opportunity_events (id, user_id, opportunity_id, event_type, label, notes, channel, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
 const updateOpportunityProgress = db.prepare('UPDATE opportunities SET status = ?, reason = ?, next_step = ?, next_step_date = ?, updated_at = ?, closed_at = ? WHERE id = ? AND user_id = ?')
+const updateContactPreparation = db.prepare(`
+  UPDATE opportunities SET
+    contact_source_reviewed = ?, contact_listing_policy = ?, no_llame_checked_at = ?,
+    planned_contact_channel = ?, contact_draft = ?, contact_preparation_notes = ?,
+    contact_preparation_status = ?, contact_preparation_updated_at = ?, updated_at = ?
+  WHERE id = ? AND user_id = ?
+`)
 const completeTask = db.prepare("UPDATE tasks SET state = 'done' WHERE id = ? AND user_id = ?")
 const completeOpportunityTasks = db.prepare("UPDATE tasks SET state = 'done' WHERE opportunity_id = ? AND user_id = ? AND state = 'pending'")
 
@@ -205,119 +263,62 @@ function backfillDetectedEvents() {
   for (const item of missing) addEvent(item.userId, item.id, 'opportunity_detected', 'Oportunidad detectada', 'Evento inicial incorporado al historial.', 'Sin canal', item.createdAt)
 }
 
-const categoryCache = new Map()
-const normalizeLabel = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-const attributeValue = (item, ids) => {
-  const attribute = (item.attributes ?? []).find((candidate) => ids.includes(candidate.id))
-  return attribute?.value_name ?? attribute?.value_struct?.number ?? null
-}
-
-async function mercadoLibreJson(pathname, token) {
-  const response = await fetch(`https://api.mercadolibre.com${pathname}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
-  if (!response.ok) throw new Error(`Mercado Libre respondió ${response.status}`)
-  return response.json()
-}
-
-async function resolveMercadoLibreCategory(propertyType, operation, token) {
-  const key = `${propertyType}:${operation}`
-  const cached = categoryCache.get(key)
-  if (cached && cached.expiresAt > Date.now()) return cached.id
-
-  const rootCategory = await mercadoLibreJson('/categories/MLA1459', token)
-  const aliases = {
-    Departamento: ['departamento'], Casa: ['casa'], PH: ['ph'], Terreno: ['terreno', 'lote'], Local: ['local'], Otro: [],
-  }[propertyType] ?? []
-  const propertyCategory = aliases.length
-    ? (rootCategory.children_categories ?? []).find((category) => aliases.some((alias) => normalizeLabel(category.name).includes(alias)))
-    : null
-  if (!propertyCategory) return 'MLA1459'
-
-  const propertyTree = await mercadoLibreJson(`/categories/${encodeURIComponent(propertyCategory.id)}`, token)
-  const operationCategory = (propertyTree.children_categories ?? []).find((category) => normalizeLabel(category.name).includes(normalizeLabel(operation)))
-  const id = operationCategory?.id ?? propertyCategory.id
-  categoryCache.set(key, { id, expiresAt: Date.now() + 30 * 60 * 1000 })
-  return id
-}
-
-function radarResultFromMercadoLibre(item, filters) {
-  const roomsValue = Number(attributeValue(item, ['ROOMS', 'BEDROOMS']))
-  const areaValue = Number(attributeValue(item, ['TOTAL_AREA', 'COVERED_AREA']))
-  return {
-    externalId: clean(item.id, 80),
-    title: clean(item.title, 160),
-    neighborhood: clean(item.location?.neighborhood?.name || filters.neighborhood, 60),
-    operation: filters.operation,
-    propertyType: filters.propertyType,
-    price: Number(item.price ?? 0),
-    currency: clean(item.currency_id || 'USD', 10),
-    rooms: Number.isFinite(roomsValue) && roomsValue > 0 ? roomsValue : null,
-    area: Number.isFinite(areaValue) && areaValue > 0 ? areaValue : null,
-    publishedAt: clean(item.start_time || '', 40),
-    url: clean(item.permalink, 1000),
-    synthetic: false,
-  }
-}
-
-async function liveRadarSearch(filters) {
-  const token = process.env.MERCADOLIBRE_ACCESS_TOKEN
-  if (!token || process.env.MERCADOLIBRE_RADAR_ENABLED !== 'true') throw new Error('Conector oficial no habilitado')
-  const category = await resolveMercadoLibreCategory(filters.propertyType, filters.operation, token)
-  const bounds = RADAR_BOUNDS[filters.neighborhood]
-  const params = new URLSearchParams({ category, item_location: `lat:${bounds.lat},lon:${bounds.lon}`, limit: '30' })
-  const data = await mercadoLibreJson(`/sites/MLA/search?${params}`, token)
-  return (data.results ?? []).map((item) => radarResultFromMercadoLibre(item, filters))
-}
-
-function demoRadarSearch(filters) {
-  return RADAR_DEMO
-    .filter((item) => item.neighborhood === filters.neighborhood && item.operation === filters.operation && (filters.propertyType === 'Otro' || item.propertyType === filters.propertyType))
-    .filter((item) => item.currency === filters.currency)
-    .filter((item) => !filters.minPrice || item.price >= filters.minPrice)
-    .filter((item) => !filters.maxPrice || item.price <= filters.maxPrice)
-    .map((item) => ({ ...item, url: 'https://www.mercadolibre.com.ar/inmuebles', synthetic: true }))
-}
-
-async function radarSearch(user, url) {
-  const filters = {
-    neighborhood: clean(url.searchParams.get('neighborhood'), 40),
-    operation: clean(url.searchParams.get('operation'), 20),
-    propertyType: clean(url.searchParams.get('propertyType'), 30),
-    currency: clean(url.searchParams.get('currency') || 'USD', 10),
-    minPrice: Math.max(0, Number(url.searchParams.get('minPrice') || 0)),
-    maxPrice: Math.max(0, Number(url.searchParams.get('maxPrice') || 0)),
-  }
-  if (!NEIGHBORHOODS.includes(filters.neighborhood) || !OPERATIONS.includes(filters.operation) || !PROPERTY_TYPES.includes(filters.propertyType) || !['USD', 'ARS'].includes(filters.currency)) throw new Error('Filtros de radar inválidos')
-  if (!Number.isFinite(filters.minPrice) || !Number.isFinite(filters.maxPrice) || (filters.maxPrice && filters.minPrice > filters.maxPrice)) throw new Error('Rango de precio inválido')
-
-  const live = Boolean(process.env.MERCADOLIBRE_ACCESS_TOKEN) && process.env.MERCADOLIBRE_RADAR_ENABLED === 'true'
-  const rawResults = live ? await liveRadarSearch(filters) : demoRadarSearch(filters)
-  const results = rawResults
-    .filter((item) => item.currency === filters.currency)
-    .filter((item) => !filters.minPrice || item.price >= filters.minPrice)
-    .filter((item) => !filters.maxPrice || item.price <= filters.maxPrice)
-  const saved = new Set(listSavedExternalIds.all(user.id).map((item) => item.externalId))
-  return {
-    mode: live ? 'live' : 'demo',
-    provider: 'Mercado Libre',
-    results: results.map((item) => ({ ...item, saved: saved.has(item.externalId) })),
-    notice: live
-      ? 'Resultados obtenidos mediante la API oficial. Verificá siempre la publicación original.'
-      : 'Modo Demo: resultados totalmente sintéticos. Para activar datos reales se requiere una aplicación oficial, OAuth y habilitación expresa del conector.',
-  }
-}
-
 function parseCookies(header = '') {
   return Object.fromEntries(header.split(';').map((part) => part.trim().split(/=(.*)/s)).filter(([key]) => key))
 }
 
+function securityHeaders() {
+  const headers = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=()',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Content-Security-Policy': "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  }
+  if (isProduction) headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+  return headers
+}
+
 function sendJson(response, status, body, extraHeaders = {}) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...extraHeaders })
+  response.writeHead(status, { ...securityHeaders(), 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extraHeaders })
   response.end(JSON.stringify(body))
 }
 
 function sessionCookie(token, maxAge = 60 * 60 * 24 * 7) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  return `session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`
+  const secure = isProduction ? '; Secure' : ''
+  const sameSite = isProduction ? 'Strict' : 'Lax'
+  return `session=${token}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${maxAge}; Priority=High${secure}`
+}
+
+const rateWindows = new Map()
+function requesterAddress(request) {
+  const forwarded = process.env.TRUST_PROXY === '1' ? String(request.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : ''
+  return forwarded || request.socket.remoteAddress || 'unknown'
+}
+
+function allowRate(request, response, bucket, maximum, windowMs) {
+  const key = `${bucket}:${requesterAddress(request)}`
+  const currentTime = Date.now()
+  const current = rateWindows.get(key)
+  const record = !current || current.resetAt <= currentTime ? { count: 0, resetAt: currentTime + windowMs } : current
+  record.count += 1
+  rateWindows.set(key, record)
+  if (rateWindows.size > 2_000) {
+    for (const [entryKey, entry] of rateWindows) if (entry.resetAt <= currentTime) rateWindows.delete(entryKey)
+  }
+  if (record.count <= maximum) return true
+  const retryAfter = Math.max(1, Math.ceil((record.resetAt - currentTime) / 1_000))
+  sendJson(response, 429, { error: 'Demasiados intentos. Esperá unos minutos antes de volver a probar.' }, { 'Retry-After': String(retryAfter) })
+  return false
+}
+
+function allowMutationFromOrigin(request, response) {
+  if (!isProduction || ['GET', 'HEAD', 'OPTIONS'].includes(request.method ?? 'GET')) return true
+  if (request.headers.origin === appOrigin) return true
+  sendJson(response, 403, { error: 'La solicitud no proviene del origen autorizado.' })
+  return false
 }
 
 async function readBody(request) {
@@ -364,6 +365,7 @@ function dashboard(user) {
 async function createSession(response, user) {
   const token = randomBytes(32).toString('base64url')
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  deleteExpiredSessions.run(now())
   insertSession.run(hashToken(token), user.id, expires, now())
   return { 'Set-Cookie': sessionCookie(token) }
 }
@@ -376,7 +378,7 @@ async function serveStatic(request, response, pathname) {
   try {
     const content = await readFile(file)
     const contentType = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }[extname(file)] ?? 'application/octet-stream'
-    response.writeHead(200, { 'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" })
+    response.writeHead(200, { ...securityHeaders(), 'Content-Type': contentType, 'Content-Security-Policy': "default-src 'self'; base-uri 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; style-src 'self' 'unsafe-inline'" })
     response.end(content)
   } catch { sendJson(response, 404, { error: 'Aplicación no construida.' }) }
 }
@@ -387,25 +389,30 @@ backfillDetectedEvents()
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host}`)
   try {
+    if (!allowMutationFromOrigin(request, response)) return
+    if (request.method === 'GET' && url.pathname === '/api/health') return sendJson(response, 200, { status: 'ok' })
     if (request.method === 'GET' && url.pathname === '/api/auth/me') {
       const user = userFor(request)
       return sendJson(response, 200, { user: user ? publicUser(user) : null })
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/demo') {
+      if (!allowRate(request, response, 'demo', 20, 15 * 60 * 1_000)) return
       const user = getUserByEmail.get('demo@agente.local')
       return sendJson(response, 200, { user: publicUser(user) }, await createSession(response, user))
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/register') {
+      if (!allowRate(request, response, 'credentials', 8, 15 * 60 * 1_000)) return
       const body = await readBody(request)
       const email = clean(body.email, 254).toLowerCase()
       const displayName = clean(body.name, 80)
       const password = String(body.password ?? '')
-      if (!/^\S+@\S+\.\S+$/.test(email) || displayName.length < 2 || password.length < 12) return sendJson(response, 400, { error: 'Ingresá nombre, email válido y una contraseña de al menos 12 caracteres.' })
+      if (!/^\S+@\S+\.\S+$/.test(email) || displayName.length < 2 || password.length < 12 || password.length > 256) return sendJson(response, 400, { error: 'Ingresá nombre, email válido y una contraseña de entre 12 y 256 caracteres.' })
       if (getUserByEmail.get(email)) return sendJson(response, 409, { error: 'Ya existe una cuenta con ese email.' })
       const user = await createUser({ email, displayName, password })
       return sendJson(response, 201, { user: publicUser(user) }, await createSession(response, user))
     }
     if (request.method === 'POST' && url.pathname === '/api/auth/login') {
+      if (!allowRate(request, response, 'credentials', 8, 15 * 60 * 1_000)) return
       const body = await readBody(request)
       const user = getUserByEmail.get(clean(body.email, 254).toLowerCase())
       if (!user || !(await passwordMatches(String(body.password ?? ''), user))) return sendJson(response, 401, { error: 'Email o contraseña incorrectos.' })
@@ -420,15 +427,68 @@ const server = createServer(async (request, response) => {
       const user = requireUser(request, response); if (!user) return
       return sendJson(response, 200, dashboard(user))
     }
-    if (request.method === 'GET' && url.pathname === '/api/radar') {
+    if (request.method === 'GET' && url.pathname === '/api/radar-items') {
       const user = requireUser(request, response); if (!user) return
-      try { return sendJson(response, 200, await radarSearch(user, url)) } catch (error) {
-        const message = error instanceof Error ? error.message : ''
-        if (message.includes('inválid')) return sendJson(response, 400, { error: message })
-        console.error('Radar:', error)
-        return sendJson(response, 502, { error: 'No se pudo consultar el proveedor oficial. El modo Demo continúa disponible si se deshabilita el conector.' })
-      }
+      return sendJson(response, 200, { items: listRadarItems.all(user.id) })
     }
+    if (request.method === 'POST' && url.pathname === '/api/radar-items') {
+      const user = requireUser(request, response); if (!user) return
+      const body = await readBody(request)
+      const title = clean(body.title, 160)
+      const neighborhood = clean(body.neighborhood, 40)
+      const operation = clean(body.operation, 20)
+      const propertyType = clean(body.propertyType, 30)
+      const source = clean(body.source, 40)
+      const sourceUrl = clean(body.sourceUrl, 1000)
+      const priceRaw = clean(body.priceAmount, 12)
+      const priceAmount = priceRaw ? Number(priceRaw) : null
+      const currency = clean(body.currency || 'USD', 10)
+      const notes = clean(body.notes, 1200)
+      if (title.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !RADAR_SOURCES.includes(source) || !validUrl(sourceUrl) || !sourceUrl) return sendJson(response, 400, { error: 'Completá referencia, zona, operación, tipo, portal y enlace válido.' })
+      if (priceAmount !== null && (!Number.isInteger(priceAmount) || priceAmount < 0)) return sendJson(response, 400, { error: 'El precio debe ser un número entero positivo.' })
+      if (!['USD', 'ARS'].includes(currency)) return sendJson(response, 400, { error: 'Elegí una moneda válida.' })
+      const id = randomUUID()
+      const createdAt = now()
+      insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, 'detected', createdAt, createdAt)
+      return sendJson(response, 201, { items: listRadarItems.all(user.id) })
+    }
+
+    const radarStateMatch = url.pathname.match(/^\/api\/radar-items\/([\w-]+)\/state$/)
+    if (request.method === 'POST' && radarStateMatch) {
+      const user = requireUser(request, response); if (!user) return
+      const item = getRadarItem.get(radarStateMatch[1], user.id)
+      if (!item) return sendJson(response, 404, { error: 'Hallazgo no encontrado.' })
+      const action = clean((await readBody(request)).action, 20)
+      const nextState = { review: 'reviewing', discard: 'discarded', restore: 'detected' }[action]
+      if (!nextState) return sendJson(response, 400, { error: 'Acción de Radar inválida.' })
+      if (item.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad.' })
+      if ((action === 'review' && item.state !== 'detected') || (action === 'discard' && !['detected', 'reviewing'].includes(item.state)) || (action === 'restore' && item.state !== 'discarded')) return sendJson(response, 409, { error: 'Esta transición no corresponde al estado actual del hallazgo.' })
+      updateRadarItemState.run(nextState, now(), item.id, user.id)
+      return sendJson(response, 200, { items: listRadarItems.all(user.id) })
+    }
+
+    const radarConvertMatch = url.pathname.match(/^\/api\/radar-items\/([\w-]+)\/convert$/)
+    if (request.method === 'POST' && radarConvertMatch) {
+      const user = requireUser(request, response); if (!user) return
+      const item = getRadarItem.get(radarConvertMatch[1], user.id)
+      if (!item) return sendJson(response, 404, { error: 'Hallazgo no encontrado.' })
+      if (item.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad.' })
+      if (item.state !== 'reviewing') return sendJson(response, 409, { error: 'Marcá el hallazgo como “En revisión” antes de convertirlo en oportunidad.' })
+
+      const opportunityId = randomUUID()
+      const createdAt = now()
+      const nextStep = 'Completar verificación de contacto'
+      const nextStepDate = createdAt.slice(0, 10)
+      const notes = `Creada desde Radar. ${item.notes}`.trim()
+      withTransaction(() => {
+        insertOpportunity.run(opportunityId, user.id, item.title, item.neighborhood, item.operation, 'Detectada', 'Hallazgo manual revisado; pendiente de verificación antes de cualquier contacto.', 58, nextStep, createdAt, item.propertyType, item.source, item.sourceUrl, '', 'unknown', notes, nextStepDate, createdAt, null, '', '')
+        addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. Sin datos de contacto.`, 'Sin canal', createdAt)
+        addTask(user.id, opportunityId, nextStep, item.title, nextStepDate, 'Sin canal')
+        updateRadarItemState.run('converted', createdAt, item.id, user.id)
+      })
+      return sendJson(response, 201, dashboard(user))
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/opportunities') {
       const user = requireUser(request, response); if (!user) return
       const body = await readBody(request)
@@ -442,6 +502,7 @@ const server = createServer(async (request, response) => {
       const contactPermission = clean(body.contactPermission, 30)
       const notes = clean(body.notes, 3000)
       const externalId = clean(body.externalId, 80)
+      const radarItemId = clean(body.radarItemId, 80)
       const externalSource = source === 'Mercado Libre' && externalId ? 'mercadolibre' : ''
       const requestedNextStep = clean(body.nextStep, 160)
       const nextStepDate = clean(body.nextStepDate, 30)
@@ -449,6 +510,10 @@ const server = createServer(async (request, response) => {
       if (name.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !SOURCES.includes(source) || !PERMISSIONS.includes(contactPermission) || !CHANNELS.includes(requestedChannel) || requestedNextStep.length < 2) return sendJson(response, 400, { error: 'Revisá los datos obligatorios de la oportunidad y su próximo paso.' })
       if (!validUrl(sourceUrl)) return sendJson(response, 400, { error: 'El enlace de origen debe comenzar con http:// o https://.' })
       if (externalSource && getOpportunityByExternal.get(user.id, externalSource, externalId)) return sendJson(response, 409, { error: 'Esta publicación ya fue guardada como oportunidad.' })
+      const radarItem = radarItemId ? getRadarItem.get(radarItemId, user.id) : null
+      if (radarItemId && !radarItem) return sendJson(response, 404, { error: 'El hallazgo de Radar ya no existe o no pertenece a esta cuenta.' })
+      if (radarItem?.state === 'converted') return sendJson(response, 409, { error: 'Este hallazgo ya fue convertido en oportunidad.' })
+      if (radarItem && radarItem.state !== 'reviewing') return sendJson(response, 409, { error: 'Marcá el hallazgo como “En revisión” antes de convertirlo en oportunidad.' })
       const opportunityId = randomUUID()
       const createdAt = now()
       const nextStep = contactPermission === 'do_not_contact' ? 'Revisar sin contactar' : requestedNextStep
@@ -464,8 +529,32 @@ const server = createServer(async (request, response) => {
         insertOpportunity.run(opportunityId, user.id, name, neighborhood, operation, 'Detectada', reason, score, nextStep, createdAt, propertyType, source, sourceUrl, contactDetail, contactPermission, notes, nextStepDate, createdAt, null, externalSource, externalId)
         addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad detectada', `Fuente: ${source}.`, 'Sin canal', createdAt)
         addTask(user.id, opportunityId, nextStep, name, nextStepDate, channel, contactPermission === 'inbound' ? 'Alta' : 'Media')
+        if (radarItem) updateRadarItemState.run('converted', createdAt, radarItem.id, user.id)
       })
       return sendJson(response, 201, dashboard(user))
+    }
+
+    const preparationMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/contact-preparation$/)
+    if (request.method === 'PUT' && preparationMatch) {
+      const user = requireUser(request, response); if (!user) return
+      const opportunity = getOpportunity.get(preparationMatch[1], user.id)
+      if (!opportunity) return sendJson(response, 404, { error: 'Oportunidad no encontrada.' })
+      if (opportunity.closedAt) return sendJson(response, 409, { error: 'La oportunidad ya está cerrada.' })
+      if (opportunity.contactPermission === 'do_not_contact') return sendJson(response, 409, { error: 'Esta oportunidad está marcada como “No contactar”.' })
+      const body = await readBody(request)
+      const sourceReviewed = body.sourceReviewed === true
+      const listingPolicy = clean(body.listingPolicy, 30)
+      const channel = clean(body.channel, 30)
+      const noLlameCheckedAt = clean(body.noLlameCheckedAt, 30)
+      const draft = clean(body.draft, 2000)
+      const notes = clean(body.notes, 1000)
+      if (!CONTACT_POLICIES.includes(listingPolicy) || !CHANNELS.includes(channel)) return sendJson(response, 400, { error: 'Revisá la restricción del aviso y el canal elegido.' })
+      if (noLlameCheckedAt && !validLocalDate(noLlameCheckedAt)) return sendJson(response, 400, { error: 'La fecha de verificación debe ser válida.' })
+      const status = preparationStatus({ sourceReviewed, listingPolicy, channel, noLlameCheckedAt })
+      if (listingPolicy === 'no_agents' && draft) return sendJson(response, 400, { error: 'No guardes un borrador cuando el aviso restringe el contacto de inmobiliarias.' })
+      const updatedAt = now()
+      updateContactPreparation.run(sourceReviewed ? 1 : 0, listingPolicy, noLlameCheckedAt, channel, draft, notes, status, updatedAt, updatedAt, opportunity.id, user.id)
+      return sendJson(response, 200, dashboard(user))
     }
 
     const eventMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/events$/)
@@ -483,6 +572,7 @@ const server = createServer(async (request, response) => {
       const nextStepDate = clean(body.nextStepDate, 30)
       if (!event || !CHANNELS.includes(channel)) return sendJson(response, 400, { error: 'Elegí un resultado y un canal válidos.' })
       if (opportunity.contactPermission === 'do_not_contact' && eventType !== 'opportunity_lost') return sendJson(response, 409, { error: 'Esta oportunidad está marcada como “No contactar”. Solo puede cerrarse o revisarse internamente.' })
+      if (eventType === 'contact_attempted' && PORTAL_SOURCES.includes(opportunity.source) && opportunity.contactPreparationStatus !== 'ready') return sendJson(response, 409, { error: 'Completá la verificación de contacto antes de registrar un contacto desde un portal.' })
       if (!event.closed && nextStep.length < 2) return sendJson(response, 400, { error: 'Las oportunidades abiertas deben conservar un próximo paso.' })
       const updatedAt = now()
       const reason = notes || event.label
@@ -509,4 +599,9 @@ const server = createServer(async (request, response) => {
 })
 
 const port = Number(process.env.PORT ?? 8787)
-server.listen(port, '127.0.0.1', () => console.log(`API protegida local: http://127.0.0.1:${port}`))
+if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('PORT debe ser un puerto válido.')
+const host = process.env.HOST ?? (isProduction ? '0.0.0.0' : '127.0.0.1')
+server.requestTimeout = 15_000
+server.headersTimeout = 20_000
+server.keepAliveTimeout = 5_000
+server.listen(port, host, () => console.log(`API iniciada en http://${host}:${port}`))

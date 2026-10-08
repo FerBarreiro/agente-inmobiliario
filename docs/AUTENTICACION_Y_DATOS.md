@@ -1,5 +1,7 @@
 # Autenticación y datos — base implementada
 
+> Estado actualizado: el endurecimiento para staging/producción está detallado en [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md). SQLite local sigue sin estar aprobada para datos personales reales.
+
 ## Alcance actual
 
 La aplicación ahora contiene una API local y una base SQLite en `web/data/agente.sqlite`. Ese directorio está excluido del control de versiones.
@@ -15,11 +17,13 @@ Hay dos clases de cuenta:
 
 - Las contraseñas se derivan con `scrypt` y una sal aleatoria; nunca se almacenan en texto plano.
 - Las sesiones usan tokens aleatorios. La base solo guarda su hash SHA-256.
-- La cookie de sesión es `HttpOnly`, `SameSite=Lax` y se marca `Secure` cuando `NODE_ENV=production`.
+- La cookie de sesión es `HttpOnly`; en producción usa `SameSite=Strict`, `Secure` y `Priority=High`.
 - Todas las consultas y actualizaciones de oportunidades/tareas filtran por el usuario autenticado en la API, no en la interfaz.
 - La API de desarrollo escucha únicamente en `127.0.0.1`.
 - La base activa claves foráneas y está excluida de Git.
-- Los cuerpos JSON tienen límite de tamaño y se validan los campos admitidos.
+- Los cuerpos JSON tienen límite de tamaño, las contraseñas se acotan a 12–256 caracteres y se validan los campos admitidos.
+- Producción exige un origen HTTPS configurado; las escrituras de otro origen se rechazan y los intentos de acceso están limitados por dirección.
+- Las respuestas incluyen cabeceras de seguridad y el servicio expone un health check sin datos sensibles.
 
 ## Modelo inicial
 
@@ -41,9 +45,8 @@ La base local resuelve autenticación, sesiones y aislamiento de datos para desa
 
 Antes de un piloto con datos reales se requiere:
 
-1. HTTPS en el dominio de despliegue y configuración de cookies `Secure`.
-2. Base de datos administrada con cifrado en reposo, backups probados y control de acceso restringido.
-3. Secretos fuera del repositorio, rotación y observabilidad.
-4. Política de retención, exportación y eliminación de datos.
-5. Revisión de autorización, protección CSRF y pruebas de aislamiento entre cuentas.
-6. Validación legal local de privacidad y comunicaciones comerciales.
+1. Base de datos administrada con cifrado en reposo, backups probados y control de acceso restringido.
+2. Secretos fuera del repositorio, rotación y observabilidad.
+3. Política de retención, exportación y eliminación de datos.
+4. Auditoría de acciones sensibles, pruebas de aislamiento entre cuentas y revisión de seguridad.
+5. Validación legal local de privacidad y comunicaciones comerciales.

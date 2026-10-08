@@ -9,12 +9,12 @@
 |---|---|
 | Operación | Venta y alquiler residencial. |
 | Zona de inicio | Núñez, Saavedra, Villa Urquiza, Coghlan y Belgrano, Ciudad de Buenos Aires. |
-| Cuenta inicial | Un agente individual, de uso privado. No habrá colaboración, roles de equipo ni acceso compartido en esta etapa. |
+| Cuenta inicial | Un usuario individual, de uso privado. No habrá colaboración, roles de equipo ni acceso compartido en esta etapa. |
 | Prueba | Un usuario real al inicio, con posibilidad de ampliar a tres usuarios piloto una vez que el flujo esté estable. |
 | Usuario demo | Cuenta separada con datos ficticios y semilla reproducible; nunca debe contener datos personales ni propiedades reales. |
-| Espacio personal | Base separada para la información propia del agente, con cuenta individual, sesión HTTP-only y datos asociados al usuario en la base local. Antes de datos personales reales debe desplegarse con controles de producción. |
+| Espacio personal | Base separada para la información propia del usuario, con cuenta individual, sesión HTTP-only y datos asociados al usuario en la base local. Antes de datos personales reales debe desplegarse con controles de producción. |
 | Canales registrados | WhatsApp, llamada, Instagram y email. En la primera versión se registran manualmente; no se envían mensajes ni se accede a cuentas externas. |
-| Descubrimiento de oportunidades | Primero carga manual y captación entrante; luego un radar controlado mediante la API oficial de Mercado Libre. Sin scraping ni recolección automática de datos de contacto. |
+| Descubrimiento de oportunidades | Primero carga manual y captación entrante; el Radar actual organiza enlaces que el usuario carga tras navegar los portales por su cuenta. Sin scraping, APIs activas ni recolección automática de datos de contacto. |
 | Portales futuros | Con evidencia de uso y tres pilotos activos, proponer a Zonaprop o Argenprop un acuerdo escrito de metadatos por 60–90 días. |
 
 ## Definiciones operativas del embudo

@@ -25,7 +25,7 @@ npm run lint
 La aplicación implementa una versión interactiva de la pantalla **Hoy** con autenticación y dos cuentas iniciales:
 
 - **Demo:** campaña y datos semilla sintéticos, pensados para recorrer el flujo sin afectar el espacio personal;
-- **Mi espacio:** cada agente crea su cuenta con email y contraseña; sus oportunidades y tareas se guardan aisladas en la base local;
+- **Mi espacio:** cada usuario crea su cuenta con email y contraseña; sus oportunidades y tareas se guardan aisladas en la base local;
 - campaña demo activa para venta y alquiler en los cinco barrios definidos;
 - meta y progreso de captación;
 - acciones priorizadas, que pueden marcarse como completadas;
@@ -34,10 +34,11 @@ La aplicación implementa una versión interactiva de la pantalla **Hoy** con au
 - ficha de oportunidad con historial comercial auditable;
 - registro de contacto, conversación, tasación, propuesta, captación o pérdida;
 - búsqueda y filtros de oportunidades, y vista de contactos con su permiso visible;
-- radar en modo Demo con filtros, metadatos mínimos, guardado manual y deduplicación;
+- radar manual con accesos externos, carga mínima de hallazgos, revisión, descarte y conversión a oportunidad;
+- verificación persistente de contacto para oportunidades de portal, con borrador copiable y sin envío automático;
 - diseño responsive para escritorio y móvil.
 
-La API local usa una base SQLite y sesiones HTTP-only. No se almacenan contraseñas en texto plano. Esta configuración es adecuada para desarrollo local; antes de una salida comercial debe desplegarse con HTTPS, secretos de producción, copias de seguridad y almacenamiento administrado. Ver `../docs/AUTENTICACION_Y_DATOS.md`.
+La API local usa una base SQLite y sesiones HTTP-only. No se almacenan contraseñas en texto plano. El servidor ya aplica controles de staging en producción (origen HTTPS, cabeceras y límites de intentos), pero SQLite no está aprobada para datos personales reales. La plantilla de configuración es [`.env.example`](.env.example) y las condiciones completas están en [`../docs/PRODUCCION_SEGURA.md`](../docs/PRODUCCION_SEGURA.md).
 
 ## Documentación funcional
 

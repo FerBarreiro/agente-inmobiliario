@@ -1,175 +1,147 @@
-# Incremento 2 — Radar de oportunidades
+# Incremento 2 — Radar manual de oportunidades
 
-**Fecha:** 2026-10-08  
-**Estado:** modo Demo implementado y verificado; conector oficial preparado pero no activado.  
-**Proveedor previsto:** API oficial de Mercado Libre.
+**Fecha:** 2026-10-08
 
-## Objetivo
+**Estado:** implementado localmente para validación manual.
 
-Permitir que el agente explore publicaciones inmobiliarias por zona sin navegar repetidamente el portal, manteniendo control humano y sin convertir el radar en una herramienta de extracción de contactos.
+**Decisión:** no hay integraciones, APIs, scraping ni consultas automáticas a portales.
 
-```text
-criterios del agente
-  → búsqueda de metadatos autorizados
-  → revisión del aviso original
-  → guardado manual como oportunidad
-  → próximo paso “Revisar publicación original”
-```
+## Propósito
 
-Guardar una publicación no implica que el anunciante sea propietario, que acepte intermediación ni que exista autorización para contactarlo.
-
-## Estado exacto
-
-### Implementado
-
-- sección **Radar** en la navegación;
-- filtros por barrio, operación, tipo de propiedad, moneda y rango de precio;
-- resultados sintéticos para los cinco barrios del piloto;
-- identificación visible del modo Demo;
-- metadatos mínimos: título, zona, operación, propiedad, precio, ambientes, superficie y fecha;
-- enlace profundo a la publicación original cuando el conector oficial está activo; los resultados Demo no muestran enlaces porque no representan propiedades reales;
-- acción humana para guardar un resultado como oportunidad;
-- fuente `Mercado Libre`, enlace e identificador externo en la oportunidad;
-- deduplicación por usuario, proveedor e identificador externo;
-- indicador “Ya guardada” al repetir la búsqueda;
-- ausencia deliberada de teléfono, email, dirección exacta y mensajes automáticos;
-- adaptador de servidor para categorías dinámicas y búsqueda geográfica de la API oficial.
-
-### No implementado o no activado
-
-- datos reales en el radar;
-- registro de una aplicación de Mercado Libre;
-- pantalla OAuth, callback, refresh y revocación de tokens;
-- almacenamiento cifrado de credenciales;
-- ejecución periódica o alertas;
-- historial de cambios de una publicación;
-- descarte, archivo o preferencias persistentes del radar;
-- detección confiable de “dueño directo”;
-- contacto con anunciantes.
-
-## Diseño del modo Demo
-
-Los resultados Demo son completamente sintéticos y usan identificadores con prefijo `DEMO-`. No representan propiedades reales. Permiten validar:
-
-- utilidad de filtros;
-- cantidad de información necesaria para decidir si abrir un aviso;
-- claridad del paso de publicación a oportunidad;
-- comprensión de que revisar no equivale a contactar;
-- necesidad de descartar, guardar o comparar resultados.
-
-## Conector oficial preparado
-
-El servidor solo intenta usar datos reales cuando existen simultáneamente:
+El Radar es una bandeja privada para que el usuario vuelva a encontrar y evalúe avisos que localizó navegando normalmente en un portal.
 
 ```text
-MERCADOLIBRE_RADAR_ENABLED=true
-MERCADOLIBRE_ACCESS_TOKEN=<token oficial>
+portal abierto por el usuario
+  → carga mínima de un hallazgo y su enlace
+  → revisión manual del aviso original
+  → oportunidad o descarte
+  → contacto manual sólo si corresponde
 ```
 
-El token se lee exclusivamente en el servidor y nunca se devuelve a la interfaz. Esta configuración es adecuada únicamente para una prueba técnica controlada porque todavía no implementa el ciclo OAuth completo ni renovación de token.
+No es un buscador inmobiliario ni una copia de catálogos ajenos. Agente+ no consulta portales, no recibe resultados desde ellos y no extrae contenido, fotografías, direcciones precisas, teléfonos, emails ni perfiles.
 
-### Flujo técnico
+## Portales iniciales
 
-1. Consultar la categoría raíz de inmuebles `MLA1459`.
-2. Resolver dinámicamente la categoría de propiedad y operación; los identificadores no se fijan como constantes porque pueden cambiar.
-3. Consultar `sites/MLA/search` con categoría y caja geográfica del barrio.
-4. Limitar la consulta a 30 resultados y aplicar timeout de 10 segundos.
-5. Normalizar solo metadatos utilizados por la interfaz.
-6. Aplicar moneda y rango de precio.
-7. Comparar identificadores con oportunidades ya guardadas por el usuario.
+La primera rutina sugerida para los barrios del piloto es:
 
-Las categorías resueltas se mantienen en memoria durante 30 minutos para reducir llamadas. No existe recolección masiva ni sincronización en segundo plano.
+1. **Mercado Libre Inmuebles**, con exploración manual de su área de [dueño directo](https://inmuebles.mercadolibre.com.ar/dueno-directo/), venta/alquiler y filtros disponibles en el sitio.
+2. **Zonaprop**, usando su búsqueda normal por CABA, barrio, operación y características. [Sitio oficial](https://www.zonaprop.com.ar/).
+3. **Argenprop**, usando su búsqueda normal por zona y operación. [Sitio oficial](https://www.argenprop.com/).
+4. **Otro**, sólo para un enlace que el usuario haya encontrado y revisado personalmente.
 
-## Coordenadas y alcance geográfico
+Mercado Libre, Zonaprop y Argenprop son fuentes iniciales por su presencia explícita de oferta de venta y alquiler en CABA; no constituyen una lista exhaustiva ni una recomendación de contactar a los anunciantes.
 
-La primera implementación utiliza cajas geográficas aproximadas para Núñez, Saavedra, Villa Urquiza, Coghlan y Belgrano. Son un mecanismo técnico inicial, no límites catastrales. Durante una prueba real se deberá medir:
+Por ahora no se agregan botones de Facebook, Instagram, Marketplace ni grupos. Esos espacios elevan el riesgo de tratar datos de perfiles personales y de confundir una publicación social con autorización para una propuesta comercial. Si más adelante un usuario registra un enlace hallado allí, se tratará como `Otro` y se deberá comprobar manualmente el contexto y las restricciones de contacto.
 
-- falsos positivos en barrios limítrofes;
-- avisos omitidos por geolocalización imprecisa;
-- necesidad de reemplazar cajas por IDs oficiales de ubicación cuando el proveedor los exponga para la búsqueda.
+## Flujo implementado
 
-## Persistencia y deduplicación
+### 1. Navegar fuera de Agente+
 
-Se agregaron a `opportunities`:
+La vista Radar muestra enlaces externos a los tres portales iniciales. Al hacer clic, el usuario navega por su cuenta en una pestaña nueva y usa los filtros de ese portal. El producto no envía criterios de búsqueda, no lee la página resultante ni conserva el historial de navegación.
 
-- `external_source`;
-- `external_id`.
+### 2. Cargar un hallazgo
 
-Existe un índice único parcial por `user_id + external_source + external_id`. El mismo aviso puede ser guardado por usuarios diferentes, pero no dos veces por la misma cuenta.
+El botón **Cargar hallazgo** crea una tarjeta privada con:
 
-El radar no conserva un espejo del catálogo: solo se persiste un resultado cuando el agente decide convertirlo en oportunidad.
+- referencia breve escrita por el usuario;
+- portal de origen;
+- URL del aviso original;
+- barrio, operación y tipo de propiedad;
+- precio orientativo y moneda, si resultan útiles;
+- observaciones propias y mínimas.
 
-## API local
+No admite datos de contacto. Tampoco se deben pegar descripciones completas, fotografías, recorridos virtuales ni otros elementos del aviso que no hagan falta para decidir una revisión.
 
-### `GET /api/radar`
+### 3. Revisar, descartar o convertir
 
-Requiere sesión y acepta:
+Cada tarjeta ofrece **Ver oportunidad**, que abre la URL original. Los estados son:
 
-- `neighborhood`;
-- `operation`;
-- `propertyType`;
-- `currency`;
-- `minPrice` opcional;
-- `maxPrice` opcional.
+| Estado | Significado | Datos personales |
+|---|---|---|
+| Hallazgo | Enlace guardado para no perderlo. | No se guardan. |
+| En revisión | El usuario considera revisarlo en la fuente original. | No se guardan. |
+| Oportunidad creada | Se convirtió desde el Radar y se registró el paso de verificación de contacto. | No se trasladan datos de contacto. |
+| Descartada | No continuará en el flujo. Puede reactivarse. | No se guardan. |
 
-Devuelve `mode: demo|live`, proveedor, aviso operativo y resultados. En modo real, un error del proveedor devuelve `502` sin filtrar token ni detalles sensibles.
+Al elegir **Convertir en oportunidad**, el sistema crea de inmediato una oportunidad con los datos mínimos ya cargados y el próximo paso **Completar verificación de contacto**. No copia datos personales, no envía mensajes ni da por autorizado un contacto. El hallazgo sale de la bandeja activa del Radar y aparece en **Oportunidades**; queda marcado como convertido para evitar duplicados.
 
-### `POST /api/opportunities`
+## Contacto: barrera obligatoria
 
-Admite `externalId` al guardar desde el radar. Si la publicación ya existe para ese usuario devuelve `409`.
+Guardar o revisar un aviso **no autoriza** contactar al anunciante. Antes de crear una tarea comercial el usuario debe:
 
-## Reglas legales, contractuales y de privacidad
+1. volver a abrir el aviso original;
+2. comprobar que no diga “inmobiliarias abstenerse” ni imponga otra restricción;
+3. identificar si el canal es legítimo para la propuesta que pretende hacer;
+4. para telefonía, verificar el Registro Nacional No Llame y dejar constancia de la comprobación;
+5. registrar sólo el dato de contacto necesario y permitir la marca inmediata **No contactar**;
+6. redactar y revisar manualmente el primer mensaje antes de enviarlo por fuera de Agente+.
 
-1. Usar exclusivamente la API oficial; nunca scraping, robots o endpoints privados.
-2. El acceso real requiere aplicación registrada y OAuth.
-3. Client secret, access token y refresh token deben permanecer protegidos y cifrados.
-4. Mostrar atribución y conservar el enlace al aviso original.
-5. No replicar un catálogo completo ni usar el contenido para competir con el portal.
-6. No extraer, inferir ni almacenar contacto del anunciante desde el radar.
-7. No automatizar mensajes.
-8. Respetar restricciones del aviso y validar la base legal antes de cualquier contacto.
-9. Revisar nuevamente términos, permisos, cuotas y retención antes de activar el modo real.
+La Ley 26.951 exige a quienes ofrecen servicios por telefonía consultar el Registro Nacional No Llame; la excepción relevante exige autorización expresa de la persona. [Texto de la ley](https://www.argentina.gob.ar/normativa/nacional/ley-26951-233066/texto). Como política conservadora del producto, WhatsApp se tratará con la misma cautela operativa hasta contar con revisión legal específica.
 
-Fuentes oficiales revisadas:
+No se implementan mensajes automáticos, campañas, botones de envío, lectura de WhatsApp ni captura de contactos. El borrador de primer mensaje es texto editable para copiar y sólo se habilita después del checklist persistente de contacto; nunca aparece directamente desde una tarjeta de Radar. El alcance completo está en [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md).
 
-- [Mercado Libre — Localizar inmuebles](https://developers.mercadolibre.com.ar/es_ar/como-empezar/localizar-inmuebles).
-- [Mercado Libre — Ítems y búsquedas](https://developers.mercadolibre.com.ar/es_ar/usuarios-y-aplicaciones/items-y-busquedas).
-- [Mercado Libre — OAuth y tokens](https://developers.mercadolibre.com.ar/es_ar/recomendaciones-de-autorizacion-y-token).
-- [Mercado Libre — Términos del Programa de Desarrolladores](https://developers.mercadolibre.com.ar/es_ar/es-ar-terminos-y-condiciones).
-- [Mercado Libre — Control de acceso](https://developers.mercadolibre.com.ar/es_ar/como-empezar/control-de-acceso-y-autorizacion).
+## Protección de datos y reglas de uso
+
+Que un aviso sea visible públicamente no elimina los límites contractuales del portal ni las obligaciones de datos personales. La Ley 25.326 contempla tratamientos publicitarios en supuestos acotados de fuentes públicas o datos facilitados/consentidos, y reconoce derechos de acceso y exclusión. [Texto de la Ley 25.326](https://www.argentina.gob.ar/normativa/nacional/64790/texto).
+
+Por ello, el diseño actual aplica estas reglas:
+
+1. navegación humana; nunca robots, scraping, extensiones de captura ni IA que recolecte resultados;
+2. enlace de salida al aviso original, sin espejo del catálogo;
+3. minimización de datos y aislamiento estricto por cuenta;
+4. marca `No contactar` que bloquea acciones comerciales;
+5. ningún contacto se infiere por estar publicado;
+6. cumplimiento de los términos vigentes de cada portal por parte del usuario.
+
+Zonaprop restringe mecanismos automáticos de navegación/búsqueda distintos de sus herramientas, por lo que el modo manual evita construir un sustituto de su buscador. [Términos de Zonaprop](https://www.zonaprop.com.ar/terminos.bum). Este documento es una guía de producto, no un dictamen legal; antes de operar con datos reales se requiere revisión profesional y controles de producción.
+
+## Implementación técnica
+
+La API local creó la tabla `radar_items`, aislada por `user_id`. Sus endpoints requieren sesión:
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/radar-items` | Devuelve sólo los hallazgos de la cuenta autenticada. |
+| `POST /api/radar-items` | Crea un hallazgo manual con URL válida y metadatos mínimos. |
+| `POST /api/radar-items/:id/state` | Marca revisión, descarte o reactivación. |
+| `POST /api/radar-items/:id/convert` | Convierte un hallazgo en revisión en oportunidad, crea el próximo paso de verificación y actualiza su estado en una misma transacción. |
+
+No existen credenciales externas, variables de entorno de proveedores ni llamadas de servidor a Mercado Libre, Zonaprop, Argenprop o redes sociales en este flujo.
 
 ## Verificación realizada
 
-El 2026-10-08 se verificó en una base temporal:
+El 2026-10-08 se comprobó con una base temporal aislada:
 
-1. consulta Demo autenticada por barrio, operación, propiedad y moneda;
-2. estructura y minimización de los resultados;
-3. guardado de un resultado sintético como oportunidad (`201`);
-4. persistencia del proveedor e identificador externo;
-5. rechazo de un segundo guardado del mismo resultado (`409`);
-6. resultado marcado como guardado en consultas posteriores;
-7. migración aditiva sobre una base existente;
-8. compilación, lint y sintaxis del servidor;
-9. revisión visual responsive del formulario, aviso de modo y tarjeta de resultado.
+1. creación autenticada de un hallazgo manual;
+2. cambio de `Hallazgo` a `En revisión`;
+3. conversión a oportunidad con próximo paso y cambio transaccional a `Oportunidad creada`;
+4. rechazo `409` al intentar convertir un hallazgo sin pasar por revisión o por segunda vez;
+5. aislamiento: una segunda cuenta no pudo ver los hallazgos de la primera;
+6. compilación de producción, lint y sintaxis del servidor;
+7. revisión visual de la vista Radar con enlaces externos, aviso de límites y bandeja vacía.
 
-No se realizó una llamada real a Mercado Libre porque todavía no se proporcionaron ni configuraron credenciales oficiales.
+## Camino de crecimiento
 
-## Condiciones para activar datos reales
+### Ahora: validación manual
 
-1. Registrar la aplicación con una finalidad compatible con los términos de Mercado Libre.
-2. Confirmar que este caso de uso —radar privado con enlace de salida— está permitido para la aplicación.
-3. Implementar OAuth completo, renovación, revocación y almacenamiento cifrado.
-4. Configurar cuotas, logs sin secretos y monitoreo de errores.
-5. Probar categorías, atributos y precisión geográfica con pocos resultados.
-6. Aprobar privacidad, retención y eliminación.
-7. Activar primero para una cuenta de prueba y revisar métricas e incidentes.
+Medir por cada usuario: hallazgos cargados, porcentaje revisado, oportunidades creadas, motivos de descarte, contactos permitidos, conversaciones, tasaciones y captaciones. La señal principal es si el Radar reduce el uso de planillas o pestañas olvidadas sin promover contactos indebidos.
 
-## Próxima validación de producto
+### Después: endurecimiento para datos reales
 
-Usar el modo Demo para responder:
+Antes de permitir contactos reales: HTTPS, base administrada, cifrado, backups, retención/borrado, exportación, auditoría de acciones sensibles, procedimiento de incidentes y checklist verificable de contacto.
 
-- qué filtros faltan;
-- si precio, ambientes y superficie bastan para decidir;
-- si conviene guardar, descartar o posponer;
-- cómo debe explicarse la diferencia entre “publicación interesante” y “oportunidad de captación legítima”;
-- si el agente realmente ahorra tiempo frente a navegar el portal.
+### Sólo con evidencia: acuerdos de metadatos
+
+Después de tres pilotos activos y evidencia de uso, proponer a Zonaprop o Argenprop un acuerdo limitado de metadatos por 60–90 días: atribución, enlace al portal, retención mínima, métricas agregadas y prohibición expresa de extracción de contactos o republicación. Cualquier API oficial deberá activarse únicamente tras autorización escrita y revisión contractual/técnica.
+
+### Condición específica para una futura integración con Mercado Libre
+
+Antes de reabrir el desarrollo del conector, se deberá crear una consulta formal por el canal de soporte para integradores de Mercado Libre. La consulta debe describir sin ambigüedad:
+
+- producto privado para uno a tres usuarios inmobiliarios;
+- búsqueda a través de la API oficial y presentación de título mínimo, portal, zona aproximada, precio, tipo y enlace original;
+- ausencia de fotografías, descripción completa, teléfonos, emails, perfiles, mensajes automáticos y republicación;
+- retención mínima, eliminación de avisos retirados y acceso aislado por cuenta;
+- finalidad exacta: identificar avisos que el usuario podría revisar para ofrecer servicios inmobiliarios.
+
+No bastan la creación de una aplicación, la aceptación genérica de términos ni una respuesta técnica sobre OAuth. Debe existir confirmación escrita de compatibilidad para esta finalidad concreta. Mientras no exista, se mantiene el Radar manual y no se almacenan credenciales externas.

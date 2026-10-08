@@ -7,7 +7,7 @@
 |---|---|---|---|---|
 | D-001 | 2026-10-07 | El piloto cubre venta y alquiler residencial. | Permite probar captación en ambos flujos sin abrir todavía otras categorías. | Vigente |
 | D-002 | 2026-10-07 | Zonas iniciales: Núñez, Saavedra, Villa Urquiza, Coghlan y Belgrano. | Mantiene foco geográfico y filtros consistentes. | Vigente |
-| D-003 | 2026-10-07 | Producto privado para un agente; luego hasta tres pilotos. | Reduce complejidad de equipos, permisos compartidos y colaboración. | Vigente |
+| D-003 | 2026-10-07 | Producto privado para un usuario; luego hasta tres pilotos. | Reduce complejidad de equipos, permisos compartidos y colaboración. | Vigente |
 | D-004 | 2026-10-07 | Dos clases de cuenta: Demo sintética y personal aislada. | Permite recorrer el producto sin mezclar ejemplos con la base de trabajo. | Vigente |
 | D-005 | 2026-10-07 | Autenticación y separación de datos desde el inicio. | Evita una migración insegura cuando se incorporen pilotos. | Implementada localmente |
 | D-006 | 2026-10-07 | WhatsApp, llamadas, Instagram y email se registran manualmente. | Mantiene control humano; no autoriza acceso ni envío automático. | Vigente |
@@ -20,9 +20,15 @@
 | D-013 | 2026-10-08 | `do_not_contact` bloquea eventos comerciales y fuerza revisión interna. | La disponibilidad pública de un dato no autoriza el contacto. | Implementada |
 | D-014 | 2026-10-08 | Contactos es inicialmente una vista derivada, no una entidad separada. | Aún no hay evidencia de relaciones persona–oportunidad que justifiquen más complejidad. | Vigente |
 | D-015 | 2026-10-08 | Métricas y ratios se muestran después de reunir una muestra útil. | Evita presentar porcentajes engañosos con pocos eventos. | Vigente |
-| D-016 | 2026-10-08 | El radar se valida primero con datos sintéticos y activación explícita del conector oficial. | Permite probar la experiencia sin presentar datos reales como disponibles ni usar credenciales inseguras. | Implementada |
-| D-017 | 2026-10-08 | Un resultado del radar solo se persiste cuando el agente lo guarda. | Evita replicar catálogos y minimiza almacenamiento. | Implementada |
-| D-018 | 2026-10-08 | El identificador externo se deduplica por usuario y proveedor. | Evita seguimientos paralelos del mismo aviso sin mezclar cuentas. | Implementada |
+| D-016 | 2026-10-08 | El radar se validaba con datos sintéticos y posible conector oficial. | Reemplazada por D-019 tras priorizar el modo manual sin integraciones. | Reemplazada |
+| D-017 | 2026-10-08 | Un resultado del radar se persistía al guardarse desde datos sintéticos/API. | Reemplazada por D-019: ahora se persisten únicamente hallazgos cargados manualmente. | Reemplazada |
+| D-018 | 2026-10-08 | Se deduplicaba el identificador externo por proveedor. | Reemplazada por D-019: no se reciben identificadores de proveedores. | Reemplazada |
+| D-019 | 2026-10-08 | El Radar pasa a ser una bandeja manual de enlaces y hallazgos privados. | El usuario navega portales por su cuenta; no hay APIs, scraping ni agregación de resultados. | Implementada localmente |
+| D-020 | 2026-10-08 | Las fuentes iniciales del Radar son Mercado Libre, Zonaprop, Argenprop y “Otro”; redes sociales quedan fuera de los accesos iniciales. | Prioriza fuentes de avisos inmobiliarios y reduce el tratamiento temprano de perfiles personales. | Implementada localmente |
+| D-021 | 2026-10-08 | El Radar manual permanece como única modalidad activa. Una integración oficial con Mercado Libre queda diferida hasta obtener confirmación escrita para el caso de uso de captación. | La aceptación técnica de una API no confirma por sí sola que sea válido usar avisos para identificar posibles propietarios a quienes ofrecer servicios. | Vigente |
+| D-022 | 2026-10-08 | El primer contacto desde una oportunidad de portal requiere checklist persistente y sólo habilita un borrador copiable. | Obliga a revisar restricciones y evita que el producto se convierta en un canal de envío o contacto automático. | Implementada localmente |
+| D-023 | 2026-10-08 | Un hallazgo en revisión se convierte directamente en oportunidad mediante un único botón. | Reduce fricción sin incorporar contactos: crea el próximo paso de verificación, lo elimina de la bandeja activa del Radar y conserva la barrera previa a cualquier contacto. | Implementada localmente |
+| D-024 | 2026-10-08 | La aplicación exige una configuración explícita y controles de origen para iniciar en producción; SQLite local sólo puede usarse como staging técnico sin datos personales. | Evita despliegues accidentales y prepara HTTPS, cabeceras, rate limiting y health checks mientras se define la migración a una base administrada. | Implementada parcialmente |
 
 ## Cómo registrar cambios
 

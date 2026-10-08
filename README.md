@@ -1,6 +1,6 @@
 # Agente Inmobiliario
 
-Producto privado de productividad y captación para agentes inmobiliarios independientes. El objetivo inicial es transformar señales de posibles propiedades en próximos pasos claros, registrar el resultado comercial y aprender del embudo real del agente.
+Producto privado de productividad y captación para usuarios inmobiliarios independientes. El objetivo inicial es transformar señales de posibles propiedades en próximos pasos claros, registrar el resultado comercial y aprender del embudo real del usuario.
 
 ## Estado
 
@@ -12,10 +12,12 @@ Existe un prototipo web local con:
 - tareas y próximos pasos;
 - historial explícito del embudo de captación;
 - búsqueda y filtros;
-- radar de oportunidades en modo Demo con guardado y deduplicación;
+- radar manual privado: hallazgos, enlace al aviso original, revisión, descarte y conversión deliberada a oportunidad;
+- checklist de contacto para oportunidades de portal y borrador editable que sólo se copia manualmente;
 - restricciones de contacto visibles y aplicadas en el servidor.
+- controles de staging: origen HTTPS autorizado, cabeceras de seguridad, límites de intentos y health check.
 
-La aplicación es apta para desarrollo y validación con datos ficticios. **Todavía no debe utilizarse con datos personales reales**: faltan despliegue HTTPS, almacenamiento administrado y cifrado, backups, controles operativos y revisión legal final.
+La aplicación es apta para desarrollo y validación con datos ficticios. **Todavía no debe utilizarse con datos personales reales**: el código ya endurece un staging con HTTPS, pero faltan base administrada, cifrado en reposo, backups, controles operativos y revisión legal final. Ver [Base de producción segura](docs/PRODUCCION_SEGURA.md).
 
 El estado canónico, la hoja de ruta y los límites están en [Estado actual y hoja de ruta](docs/ESTADO_ACTUAL_Y_HOJA_DE_RUTA.md). El índice completo está en [Documentación](docs/README.md).
 

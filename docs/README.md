@@ -10,8 +10,10 @@ Este directorio separa deliberadamente la visión futura, las decisiones vigente
 2. [`DECISIONES_PILOTO.md`](DECISIONES_PILOTO.md) — alcance y reglas confirmadas del piloto.
 3. [`INCREMENTO_CAPTACION_MANUAL.md`](INCREMENTO_CAPTACION_MANUAL.md) — comportamiento, modelo y pruebas del incremento actual.
 4. [`AUTENTICACION_Y_DATOS.md`](AUTENTICACION_Y_DATOS.md) — controles implementados y condiciones pendientes antes de datos reales.
-5. [`ESTRATEGIA_VALIDACION_Y_PORTALES.md`](ESTRATEGIA_VALIDACION_Y_PORTALES.md) — secuencia manual → entrante → Mercado Libre → acuerdos con portales.
-6. [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md) — alcance implementado del radar y requisitos para activar datos reales.
+5. [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md) — controles aplicados, configuración de staging y condiciones antes de datos reales.
+6. [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md) — checklist, borrador manual y barreras previas al primer contacto.
+7. [`ESTRATEGIA_VALIDACION_Y_PORTALES.md`](ESTRATEGIA_VALIDACION_Y_PORTALES.md) — secuencia manual → entrante → evidencia → acuerdos con portales.
+8. [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md) — Radar manual, reglas de contacto y crecimiento sin integraciones.
 
 ## Catálogo
 
@@ -24,8 +26,10 @@ Este directorio separa deliberadamente la visión futura, las decisiones vigente
 | [`ESTADO_ACTUAL_Y_HOJA_DE_RUTA.md`](ESTADO_ACTUAL_Y_HOJA_DE_RUTA.md) | Estado canónico y orden de ejecución. | Vigente. |
 | [`IMPLEMENTACION_INICIAL.md`](IMPLEMENTACION_INICIAL.md) | Registro del primer prototipo del 2026-10-07. | Histórico; no representa por sí solo el estado actual. |
 | [`INCREMENTO_CAPTACION_MANUAL.md`](INCREMENTO_CAPTACION_MANUAL.md) | Especificación y evidencia del incremento del 2026-10-08. | Implementado y verificado localmente. |
-| [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md) | Radar, deduplicación y adaptador de Mercado Libre. | Demo implementada; conexión real pendiente de OAuth y autorización. |
+| [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md) | Radar manual, hallazgos privados y conversión controlada a oportunidad. | Implementado localmente; sin conexión a portales. |
+| [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md) | Checklist de contacto y borrador copiable. | Implementado localmente; sin envíos ni datos reales. |
 | [`AUTENTICACION_Y_DATOS.md`](AUTENTICACION_Y_DATOS.md) | Arquitectura de cuenta, datos y seguridad. | Implementación local; producción pendiente. |
+| [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md) | Endurecimiento de staging y precondiciones de despliegue. | Implementado; requiere base administrada antes de datos reales. |
 | [`ESTRATEGIA_VALIDACION_Y_PORTALES.md`](ESTRATEGIA_VALIDACION_Y_PORTALES.md) | Estrategia de captación e integraciones autorizadas. | Aprobada; integraciones aún no implementadas. |
 
 ## Jerarquía ante diferencias

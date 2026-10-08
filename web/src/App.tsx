@@ -44,31 +44,40 @@ type Opportunity = {
   closedAt: string | null
   externalSource: string
   externalId: string
+  contactSourceReviewed: number
+  contactListingPolicy: 'not_started' | 'allows_agents' | 'no_agents'
+  noLlameCheckedAt: string
+  plannedContactChannel: string
+  contactDraft: string
+  contactPreparationNotes: string
+  contactPreparationStatus: 'not_started' | 'pending' | 'ready' | 'blocked'
+  contactPreparationUpdatedAt: string
   events: OpportunityEvent[]
 }
 type Dashboard = { user: User; tasks: Task[]; opportunities: Opportunity[] }
 type AuthMode = 'login' | 'register'
 type View = 'Hoy' | 'Radar' | 'Oportunidades' | 'Contactos' | 'Campañas' | 'Métricas'
-type RadarResult = {
-  externalId: string
+type RadarState = 'detected' | 'reviewing' | 'converted' | 'discarded'
+type RadarItem = {
+  id: string
   title: string
   neighborhood: string
   operation: 'Venta' | 'Alquiler'
   propertyType: string
-  price: number
+  source: string
+  sourceUrl: string
+  priceAmount: number | null
   currency: 'USD' | 'ARS'
-  rooms: number | null
-  area: number | null
-  publishedAt: string
-  url: string
-  synthetic: boolean
-  saved: boolean
+  notes: string
+  state: RadarState
+  createdAt: string
+  updatedAt: string
 }
-type RadarResponse = { mode: 'demo' | 'live'; provider: string; notice: string; results: RadarResult[] }
+type RadarItemsResponse = { items: RadarItem[] }
 
 const neighborhoods = ['Núñez', 'Saavedra', 'Villa Urquiza', 'Coghlan', 'Belgrano']
 const propertyTypes = ['Departamento', 'Casa', 'PH', 'Terreno', 'Local', 'Otro']
-const sources = ['Referido', 'Recorrido de zona', 'Formulario entrante', 'Llamada entrante', 'Enlace compartido', 'Mercado Libre', 'Otro']
+const sources = ['Carga manual', 'Referido', 'Recorrido de zona', 'Formulario entrante', 'Llamada entrante', 'Enlace compartido', 'Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
 const channels = ['WhatsApp', 'Llamada', 'Instagram', 'Email', 'Presencial', 'Sin canal']
 const eventTypes = [
   ['contact_attempted', 'Contacto intentado'],
@@ -158,7 +167,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: () => Promise<void> 
   return <main className="auth-shell">
     <section className="auth-brand">
       <Brand />
-      <div><p className="eyebrow light">PRODUCTIVIDAD PARA AGENTES INMOBILIARIOS</p><h1>Tu cartera crece con cada próximo paso.</h1><p>Organizá captación, seguimientos y objetivos sin mezclar tus datos con la demostración.</p></div>
+      <div><p className="eyebrow light">PRODUCTIVIDAD PARA USUARIOS INMOBILIARIOS</p><h1>Tu cartera crece con cada próximo paso.</h1><p>Organizá captación, seguimientos y objetivos sin mezclar tus datos con la demostración.</p></div>
       <ul><li>Datos separados por cuenta</li><li>Sesiones seguras y privadas</li><li>Sin automatizaciones de contacto</li></ul>
     </section>
     <section className="auth-panel">
@@ -187,6 +196,7 @@ function Brand() {
 function DashboardScreen({ dashboard, setDashboard, notice, setNotice, onLogout }: { dashboard: Dashboard; setDashboard: (value: Dashboard) => void; notice: string; setNotice: (value: string) => void; onLogout: () => void }) {
   const [view, setView] = useState<View>('Hoy')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isRadarCreateOpen, setIsRadarCreateOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const { user } = dashboard
   const selectedOpportunity = dashboard.opportunities.find((item) => item.id === selectedId) ?? null
@@ -204,16 +214,16 @@ function DashboardScreen({ dashboard, setDashboard, notice, setNotice, onLogout 
       <div className="sidebar-foot"><span className={user.isDemo ? 'demo-dot' : 'personal-dot'} />{user.isDemo ? 'Datos demo aislados' : 'Datos guardados en tu cuenta'}</div>
     </aside>
     <section className="workspace">
-      <header className="topbar"><div><p className="eyebrow">{view === 'Hoy' ? 'TU ACTIVIDAD Y PRÓXIMOS PASOS' : view.toUpperCase()}</p><h1>{titles[view]}</h1></div><button className="primary-button" type="button" onClick={() => setIsCreateOpen(true)}><span>＋</span> Nueva oportunidad</button></header>
+      <header className="topbar"><div><p className="eyebrow">{view === 'Hoy' ? 'TU ACTIVIDAD Y PRÓXIMOS PASOS' : view.toUpperCase()}</p><h1>{titles[view]}</h1></div>{view === 'Radar' ? <button className="primary-button" type="button" onClick={() => setIsRadarCreateOpen(true)}><span>＋</span> Cargar hallazgo</button> : <button className="primary-button" type="button" onClick={() => setIsCreateOpen(true)}><span>＋</span> Nueva oportunidad</button>}</header>
       {notice && <div className="notice" role="status"><span>✓</span> {notice}</div>}
       {view === 'Hoy' && <TodayView dashboard={dashboard} onOpen={setSelectedId} onCreate={() => setIsCreateOpen(true)} onDashboard={(data, message) => updateDashboard(data, message)} />}
-      {view === 'Radar' && <RadarView onDashboard={(data, message) => updateDashboard(data, message)} />}
+      {view === 'Radar' && <RadarView isCreateOpen={isRadarCreateOpen} onCloseCreate={() => setIsRadarCreateOpen(false)} onDashboard={(data, message) => updateDashboard(data, message)} />}
       {view === 'Oportunidades' && <OpportunitiesView opportunities={dashboard.opportunities} onOpen={setSelectedId} />}
       {view === 'Contactos' && <ContactsView opportunities={dashboard.opportunities} onOpen={setSelectedId} />}
       {(view === 'Campañas' || view === 'Métricas') && <PlannedView view={view} />}
     </section>
     {isCreateOpen && <OpportunityModal isDemo={user.isDemo} onClose={() => setIsCreateOpen(false)} onSaved={(data) => { setIsCreateOpen(false); updateDashboard(data, 'Oportunidad y próximo paso guardados.') }} />}
-    {selectedOpportunity && <OpportunityDetail opportunity={selectedOpportunity} onClose={() => setSelectedId(null)} onSaved={(data) => updateDashboard(data, 'Resultado registrado y próximo paso actualizado.')} />}
+    {selectedOpportunity && <OpportunityDetail opportunity={selectedOpportunity} agentName={user.name} onClose={() => setSelectedId(null)} onSaved={(data, message = 'Resultado registrado y próximo paso actualizado.') => updateDashboard(data, message)} />}
   </main>
 }
 
@@ -244,94 +254,61 @@ function TodayView({ dashboard, onOpen, onCreate, onDashboard }: { dashboard: Da
   </>
 }
 
-function RadarView({ onDashboard }: { onDashboard: (data: Dashboard, message: string) => void }) {
-  const [neighborhood, setNeighborhood] = useState('Núñez')
-  const [operation, setOperation] = useState('Venta')
-  const [propertyType, setPropertyType] = useState('Departamento')
-  const [currency, setCurrency] = useState('USD')
-  const [minPrice, setMinPrice] = useState('')
-  const [maxPrice, setMaxPrice] = useState('')
-  const [radar, setRadar] = useState<RadarResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+function RadarView({ isCreateOpen, onCloseCreate, onDashboard }: { isCreateOpen: boolean; onCloseCreate: () => void; onDashboard: (data: Dashboard, message: string) => void }) {
+  const [items, setItems] = useState<RadarItem[]>([])
+  const [filter, setFilter] = useState<'all' | RadarState>('all')
   const [error, setError] = useState('')
-  const [savingId, setSavingId] = useState('')
+  const [busyId, setBusyId] = useState('')
 
-  const loadResults = async (filters: { neighborhood: string; operation: string; propertyType: string; currency: string; minPrice?: string; maxPrice?: string }) => {
-    setLoading(true)
-    setError('')
-    const params = new URLSearchParams({ neighborhood: filters.neighborhood, operation: filters.operation, propertyType: filters.propertyType, currency: filters.currency })
-    if (filters.minPrice) params.set('minPrice', filters.minPrice)
-    if (filters.maxPrice) params.set('maxPrice', filters.maxPrice)
-    try { setRadar(await api<RadarResponse>(`/api/radar?${params}`)) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo consultar el radar.') } finally { setLoading(false) }
+  const loadItems = async () => {
+    try { setItems((await api<RadarItemsResponse>('/api/radar-items')).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo cargar el Radar.') }
   }
 
   useEffect(() => {
-    const params = new URLSearchParams({ neighborhood: 'Núñez', operation: 'Venta', propertyType: 'Departamento', currency: 'USD' })
-    api<RadarResponse>(`/api/radar?${params}`)
-      .then(setRadar)
-      .catch((reason) => setError(reason instanceof Error ? reason.message : 'No se pudo consultar el radar.'))
-      .finally(() => setLoading(false))
+    let current = true
+    void api<RadarItemsResponse>('/api/radar-items')
+      .then((data) => { if (current) setItems(data.items) })
+      .catch((reason) => { if (current) setError(reason instanceof Error ? reason.message : 'No se pudo cargar el Radar.') })
+    return () => { current = false }
   }, [])
 
-  const search = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    void loadResults({ neighborhood, operation, propertyType, currency, minPrice, maxPrice })
+  const changeState = async (item: RadarItem, action: 'review' | 'discard' | 'restore') => {
+    setBusyId(item.id)
+    setError('')
+    try { setItems((await api<RadarItemsResponse>(`/api/radar-items/${item.id}/state`, { method: 'POST', body: JSON.stringify({ action }) })).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo actualizar el hallazgo.') } finally { setBusyId('') }
   }
 
-  const saveOpportunity = async (result: RadarResult) => {
-    setSavingId(result.externalId)
+  const convertToOpportunity = async (item: RadarItem) => {
+    setBusyId(item.id)
     setError('')
     try {
-      const data = await api<Dashboard>('/api/opportunities', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: result.title,
-          neighborhood: result.neighborhood,
-          operation: result.operation,
-          propertyType: propertyTypes.includes(result.propertyType) ? result.propertyType : 'Otro',
-          source: 'Mercado Libre',
-          sourceUrl: result.synthetic ? '' : result.url,
-          contactDetail: '',
-          contactPermission: 'unknown',
-          notes: result.synthetic
-            ? `Ejemplo sintético ${result.externalId} creado para validar el radar. No corresponde a una publicación real.`
-            : `Publicación ${result.externalId} detectada por el radar. Precio observado: ${formatMoney(result.price, result.currency)}. Verificar vigencia y condiciones en la fuente original.`,
-          nextStep: 'Revisar publicación original',
-          nextStepDate: localDateValue(),
-          channel: 'Sin canal',
-          externalId: result.externalId,
-        }),
-      })
-      setRadar((current) => current ? { ...current, results: current.results.map((item) => item.externalId === result.externalId ? { ...item, saved: true } : item) } : current)
-      onDashboard(data, 'Publicación guardada como oportunidad para revisión manual.')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar la oportunidad.') } finally { setSavingId('') }
+      const data = await api<Dashboard>(`/api/radar-items/${item.id}/convert`, { method: 'POST' })
+      onDashboard(data, 'Hallazgo convertido en oportunidad. Completá la verificación antes de cualquier contacto.')
+      await loadItems()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo convertir el hallazgo.') } finally { setBusyId('') }
   }
+
+  const visibleItems = items.filter((item) => item.state !== 'converted' && (filter === 'all' || item.state === filter))
+  const stateLabels: Record<RadarState, string> = { detected: 'Hallazgo', reviewing: 'En revisión', converted: 'Oportunidad creada', discarded: 'Descartada' }
 
   return <section className="radar-page">
     <section className="panel radar-search-panel">
-      <div className="radar-intro"><div><p className="eyebrow">BÚSQUEDA AUTORIZADA · SIN CONTACTOS</p><h2>Explorá publicaciones por zona</h2><p>El radar muestra metadatos y siempre conserva el enlace al aviso original. Guardar un resultado no autoriza contactar al anunciante.</p></div><span className={`radar-mode ${radar?.mode ?? 'demo'}`}>{radar?.mode === 'live' ? 'API oficial activa' : 'Modo Demo'}</span></div>
-      <form className="radar-filters" onSubmit={search}>
-        <label>Barrio<select value={neighborhood} onChange={(event) => setNeighborhood(event.target.value)}>{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label>Operación<select value={operation} onChange={(event) => { setOperation(event.target.value); setCurrency(event.target.value === 'Venta' ? 'USD' : 'ARS') }}><option>Venta</option><option>Alquiler</option></select></label>
-        <label>Propiedad<select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label>Moneda<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>USD</option><option>ARS</option></select></label>
-        <label>Precio mínimo<input type="number" min="0" inputMode="numeric" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} placeholder="Sin mínimo" /></label>
-        <label>Precio máximo<input type="number" min="0" inputMode="numeric" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} placeholder="Sin máximo" /></label>
-        <button className="primary-button" type="submit" disabled={loading}>{loading ? 'Buscando…' : 'Buscar oportunidades'}</button>
-      </form>
+      <div className="radar-intro"><div><p className="eyebrow">RADAR MANUAL · SIN INTEGRACIONES</p><h2>Revisá avisos sin copiar catálogos</h2><p>Abrí un portal, encontrá el aviso como usuario y cargá sólo la referencia necesaria. Agente+ no consulta, extrae ni almacena resultados de terceros.</p></div><span className="radar-mode manual">Carga manual</span></div>
+      <div className="portal-launchers" aria-label="Portales sugeridos"><a href="https://inmuebles.mercadolibre.com.ar/dueno-directo/" target="_blank" rel="noreferrer">Abrir Mercado Libre ↗</a><a href="https://www.zonaprop.com.ar/" target="_blank" rel="noreferrer">Abrir Zonaprop ↗</a><a href="https://www.argenprop.com/" target="_blank" rel="noreferrer">Abrir Argenprop ↗</a></div>
     </section>
-    {radar && <div className="radar-notice"><span>i</span><p>{radar.notice}</p></div>}
+    <div className="radar-notice"><span>i</span><p>Usá los portales en forma manual y respetá las restricciones de cada aviso. El Radar no guarda teléfonos, fotos ni descripciones completas.</p></div>
     {error && <p className="form-error radar-error" role="alert">{error}</p>}
-    <section className="radar-results-heading"><div><p className="eyebrow">RESULTADOS</p><h2>{loading ? 'Consultando…' : `${radar?.results.length ?? 0} publicaciones`}</h2></div><small>Sin teléfonos, emails ni dirección exacta</small></section>
-    <div className="radar-grid">{radar?.results.map((result) => <article className="radar-card" key={result.externalId}>
-      <div className="radar-card-top"><span>{result.synthetic ? 'EJEMPLO SINTÉTICO' : 'MERCADO LIBRE'}</span><small>{formatDate(result.publishedAt)}</small></div>
-      <h3>{result.title}</h3><p className="radar-location">{result.neighborhood} · {result.propertyType} · {result.operation}</p>
-      <strong className="radar-price">{formatMoney(result.price, result.currency)}</strong>
-      <div className="radar-features"><span>{result.rooms ? `${result.rooms} ambientes` : 'Ambientes no informados'}</span><span>{result.area ? `${result.area} m²` : 'Superficie no informada'}</span></div>
-      <div className="radar-actions">{result.synthetic ? <span className="radar-demo-link">Sin publicación real en Demo</span> : <a href={result.url} target="_blank" rel="noreferrer">Abrir publicación ↗</a>}<button type="button" disabled={result.saved || savingId === result.externalId} onClick={() => saveOpportunity(result)}>{result.saved ? 'Ya guardada' : savingId === result.externalId ? 'Guardando…' : 'Guardar oportunidad'}</button></div>
+    <section className="radar-results-heading"><div><p className="eyebrow">TU BANDEJA PRIVADA</p><h2>{visibleItems.length} {visibleItems.length === 1 ? 'hallazgo' : 'hallazgos'}</h2></div><select aria-label="Filtrar hallazgos" value={filter} onChange={(event) => setFilter(event.target.value as 'all' | RadarState)}><option value="all">Todos</option><option value="detected">Hallazgos</option><option value="reviewing">En revisión</option><option value="discarded">Descartadas</option></select></section>
+    <div className="radar-grid">{visibleItems.map((item) => <article className="radar-card manual-card" key={item.id}>
+      <div className="radar-card-top"><span>{item.source.toUpperCase()}</span><small>{stateLabels[item.state]}</small></div>
+      <h3>{item.title}</h3><p className="radar-location">{item.neighborhood} · {item.propertyType} · {item.operation}</p>
+      {item.priceAmount !== null && <strong className="radar-price">{formatMoney(item.priceAmount, item.currency)}</strong>}
+      {item.notes && <p className="radar-card-notes">{item.notes}</p>}
+      <div className="radar-actions radar-actions-stack"><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ver oportunidad ↗</a>{item.state === 'detected' && <button type="button" disabled={busyId === item.id} onClick={() => void changeState(item, 'review')}>{busyId === item.id ? 'Actualizando…' : 'Marcar para revisar'}</button>}{item.state === 'reviewing' && <><button type="button" disabled={busyId === item.id} onClick={() => void convertToOpportunity(item)}>{busyId === item.id ? 'Convirtiendo…' : 'Convertir en oportunidad'}</button><button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => void changeState(item, 'discard')}>Descartar</button></>}{item.state === 'discarded' && <button type="button" className="radar-text-action" disabled={busyId === item.id} onClick={() => void changeState(item, 'restore')}>Volver a hallazgos</button>}</div>
     </article>)}
-    {!loading && radar?.results.length === 0 && <div className="empty-card radar-empty"><strong>No encontramos ejemplos con estos filtros</strong><p>Probá otra combinación de barrio, tipo, moneda o rango de precio.</p></div>}</div>
-    <p className="radar-legal-note">El radar sirve para revisar mercado y organizar enlaces. No determina que el anunciante sea propietario ni que acepte intermediación. Toda acción requiere revisar el aviso original, sus restricciones y la base legal del contacto.</p>
+    {visibleItems.length === 0 && <div className="empty-card radar-empty"><strong>Tu Radar todavía está vacío</strong><p>Abrí un portal, elegí un aviso de forma manual y cargá un enlace para revisarlo después.</p></div>}</div>
+    <p className="radar-legal-note">Un aviso público no confirma que sea dueño directo ni que acepte intermediación. Antes de crear una oportunidad, verificá el aviso, sus restricciones y el canal de contacto.</p>
+    {isCreateOpen && <RadarItemModal onClose={onCloseCreate} onSaved={(nextItems) => { setItems(nextItems); onCloseCreate() }} />}
   </section>
 }
 
@@ -370,6 +347,31 @@ function OpportunityList({ opportunities, onOpen }: { opportunities: Opportunity
   </article>)}{opportunities.length === 0 && <p className="empty-state">No hay oportunidades que coincidan con estos filtros.</p>}</div>
 }
 
+function RadarItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: (items: RadarItem[]) => void }) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    const data = new FormData(event.currentTarget)
+    try { onSaved((await api<RadarItemsResponse>('/api/radar-items', { method: 'POST', body: JSON.stringify(Object.fromEntries(data.entries())) })).items) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar el hallazgo.') } finally { setBusy(false) }
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="radar-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+    <button className="modal-close" type="button" onClick={onClose}>×</button><p className="eyebrow">CARGA MANUAL · SIN CONTACTOS</p><h2 id="radar-modal-title">Cargar hallazgo</h2><p className="modal-description">Anotá únicamente lo que necesitás para volver a evaluar el aviso. No copies fotos, descripciones completas ni datos personales.</p>
+    <form onSubmit={save}>
+      <div className="form-row"><label>Referencia del aviso<input name="title" placeholder="Ej. Depto 3 amb. con balcón" autoFocus minLength={2} required /></label><label>Portal<select name="source"><option>Mercado Libre</option><option>Zonaprop</option><option>Argenprop</option><option>Otro</option></select></label></div>
+      <label>Enlace de la publicación<input name="sourceUrl" type="url" placeholder="https://…" required /></label>
+      <div className="form-row"><label>Barrio<select name="neighborhood">{neighborhoods.map((item) => <option key={item}>{item}</option>)}</select></label><label>Operación<select name="operation"><option>Venta</option><option>Alquiler</option></select></label></div>
+      <div className="form-row"><label>Tipo de propiedad<select name="propertyType">{propertyTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label>Precio orientativo <span className="optional">opcional</span><input name="priceAmount" type="number" min="0" step="1" inputMode="numeric" placeholder="Ej. 185000" /></label></div>
+      <div className="form-row"><label>Moneda<select name="currency"><option>USD</option><option>ARS</option></select></label><span /></div>
+      <label>Notas <span className="optional">opcionales</span><textarea name="notes" rows={3} placeholder="Sólo observaciones propias y necesarias para decidir si revisarlo." /></label>
+      {error && <p className="form-error">{error}</p>}
+      <div className="modal-actions"><button type="button" className="cancel-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={busy} type="submit">{busy ? 'Guardando…' : 'Guardar hallazgo'}</button></div>
+    </form>
+  </section></div>
+}
+
 function OpportunityModal({ isDemo, onClose, onSaved }: { isDemo: boolean; onClose: () => void; onSaved: (data: Dashboard) => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -399,15 +401,64 @@ function OpportunityModal({ isDemo, onClose, onSaved }: { isDemo: boolean; onClo
   </section></div>
 }
 
-function OpportunityDetail({ opportunity, onClose, onSaved }: { opportunity: Opportunity; onClose: () => void; onSaved: (data: Dashboard) => void }) {
+function OpportunityDetail({ opportunity, agentName, onClose, onSaved }: { opportunity: Opportunity; agentName: string; onClose: () => void; onSaved: (data: Dashboard, message?: string) => void }) {
+  const isPortalOpportunity = ['Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro'].includes(opportunity.source)
   return <div className="modal-backdrop detail-backdrop" onMouseDown={onClose}><section className="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(event) => event.stopPropagation()}>
     <button className="modal-close" type="button" onClick={onClose}>×</button>
     <header className="detail-header"><p className="eyebrow">{opportunity.propertyType} · {opportunity.neighborhood}</p><h2 id="detail-title">{opportunity.name}</h2><div className="detail-badges"><span>{opportunity.status}</span><span className={`permission-chip ${opportunity.contactPermission}`}>{permissionLabels[opportunity.contactPermission]}</span></div></header>
     <section className="detail-section"><h3>Información de origen</h3><dl className="detail-grid"><div><dt>Operación</dt><dd>{opportunity.operation}</dd></div><div><dt>Fuente</dt><dd>{opportunity.source}</dd></div><div><dt>Contacto</dt><dd>{opportunity.contactDetail || 'No cargado'}</dd></div><div><dt>Detectada</dt><dd>{formatDate(opportunity.createdAt)}</dd></div></dl>{opportunity.sourceUrl && <a className="source-link" href={opportunity.sourceUrl} target="_blank" rel="noreferrer">Abrir fuente original ↗</a>}{opportunity.notes && <p className="detail-notes">{opportunity.notes}</p>}</section>
+    {isPortalOpportunity && !opportunity.closedAt && <ContactPreparation opportunity={opportunity} agentName={agentName} onSaved={onSaved} />}
     {!opportunity.closedAt && <section className="next-callout"><small>PRÓXIMO PASO</small><strong>{opportunity.nextStep}</strong><span>{formatDate(opportunity.nextStepDate)}</span></section>}
     {!opportunity.closedAt && <EventForm opportunity={opportunity} onSaved={onSaved} />}
     <section className="detail-section timeline-section"><h3>Historial comercial</h3><div className="timeline">{opportunity.events.map((event) => <article key={event.id}><span className="timeline-dot" /><div><strong>{event.label}</strong><small>{formatDateTime(event.createdAt)} · {event.channel}</small>{event.notes && <p>{event.notes}</p>}</div></article>)}</div></section>
   </section></div>
+}
+
+function ContactPreparation({ opportunity, agentName, onSaved }: { opportunity: Opportunity; agentName: string; onSaved: (data: Dashboard, message?: string) => void }) {
+  const [sourceReviewed, setSourceReviewed] = useState(Boolean(opportunity.contactSourceReviewed))
+  const [listingPolicy, setListingPolicy] = useState(opportunity.contactListingPolicy)
+  const [channel, setChannel] = useState(opportunity.plannedContactChannel === 'Sin canal' ? 'WhatsApp' : opportunity.plannedContactChannel)
+  const [noLlameCheckedAt, setNoLlameCheckedAt] = useState(opportunity.noLlameCheckedAt)
+  const [draft, setDraft] = useState(opportunity.contactDraft)
+  const [notes, setNotes] = useState(opportunity.contactPreparationNotes)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const needsNoLlame = channel === 'WhatsApp' || channel === 'Llamada'
+  const storedReady = opportunity.contactPreparationStatus === 'ready'
+  const statusLabels = { not_started: 'Pendiente', pending: 'Pendiente', ready: 'Lista para copiar', blocked: 'No contactar' }
+  const status = opportunity.contactPreparationStatus
+  const defaultDraft = `Hola [nombre], vi tu publicación de ${opportunity.propertyType.toLowerCase()} en ${opportunity.neighborhood}. Soy ${agentName}, agente inmobiliario. Si estás evaluando recibir asesoramiento o una tasación, puedo contarte cómo trabajo. Si preferís no recibir más mensajes, avisame y lo respeto. Gracias.`
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api<Dashboard>(`/api/opportunities/${opportunity.id}/contact-preparation`, { method: 'PUT', body: JSON.stringify({ sourceReviewed, listingPolicy, channel, noLlameCheckedAt, draft, notes }) })
+      onSaved(data, listingPolicy === 'no_agents' ? 'La oportunidad quedó bloqueada para contacto desde el aviso.' : 'Verificación de contacto guardada. No se envió ningún mensaje.')
+      setNotice('Guardado. No se envió ningún mensaje.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo guardar la verificación.') } finally { setBusy(false) }
+  }
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(draft); setNotice('Borrador copiado. Revisalo antes de enviarlo manualmente.') } catch { setError('No se pudo copiar automáticamente. Seleccioná el texto y copialo de forma manual.') }
+  }
+
+  return <section className="detail-section preparation-box"><div className="preparation-heading"><div><h3>Verificación antes de contactar</h3><p>Este control no consulta registros ni envía mensajes por vos.</p></div><span className={`preparation-status ${status}`}>{statusLabels[status]}</span></div>
+    <form onSubmit={save}>
+      <label className="check-row"><input type="checkbox" checked={sourceReviewed} onChange={(event) => setSourceReviewed(event.target.checked)} />Revisé el aviso original y sus restricciones.</label>
+      <label>Restricción del aviso<select value={listingPolicy} onChange={(event) => setListingPolicy(event.target.value as Opportunity['contactListingPolicy'])}><option value="not_started">No está confirmada</option><option value="allows_agents">Admite contacto de inmobiliarias</option><option value="no_agents">Inmobiliarias abstenerse / no contactar</option></select></label>
+      <label>Canal previsto<select value={channel} onChange={(event) => setChannel(event.target.value)}><option>WhatsApp</option><option>Llamada</option><option>Instagram</option><option>Email</option></select></label>
+      {needsNoLlame && <label>Registro No Llame verificado el<input type="date" value={noLlameCheckedAt} onChange={(event) => setNoLlameCheckedAt(event.target.value)} /><small>La app no realiza esta consulta: registrá sólo la fecha luego de verificarla.</small></label>}
+      {listingPolicy === 'no_agents' && <p className="contact-warning">El aviso indica que no debe iniciarse contacto. Guardalo como referencia o descartalo, pero no prepares ni envíes un mensaje.</p>}
+      <label>Nota de verificación <span className="optional">opcional</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} placeholder="Ej. el aviso aclara que acepta intermediación." /></label>
+      {listingPolicy !== 'no_agents' && <><div className="draft-heading"><strong>Borrador de primer mensaje</strong><button type="button" className="text-button" disabled={!storedReady} onClick={() => setDraft(defaultDraft)}>Generar borrador</button></div><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={5} placeholder="Guardá una verificación completa para generar un borrador editable." disabled={!storedReady} /><small className="draft-note">No se envía desde Agente+. La persona usuaria debe editarlo, copiarlo y decidir manualmente si corresponde enviarlo.</small></>}
+      {error && <p className="form-error">{error}</p>}{notice && <p className="preparation-notice">{notice}</p>}
+      <div className="preparation-actions"><button className="secondary-button" type="submit" disabled={busy}>{busy ? 'Guardando…' : 'Guardar verificación'}</button><button className="primary-button" type="button" disabled={!storedReady || !draft.trim()} onClick={() => void copy()}>Copiar borrador</button></div>
+    </form>
+  </section>
 }
 
 function EventForm({ opportunity, onSaved }: { opportunity: Opportunity; onSaved: (data: Dashboard) => void }) {

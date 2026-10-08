@@ -1,12 +1,12 @@
 # Estado actual y hoja de ruta
 
 **Fecha de corte:** 2026-10-08  
-**Estado del producto:** prototipo local funcional; validación manual pendiente.  
+**Estado del producto:** prototipo local funcional con endurecimiento de staging; validación manual pendiente.
 **Fuente canónica:** este documento determina qué está operativo y qué sigue siendo diseño.
 
 ## Objetivo vigente
 
-Validar que un agente inmobiliario independiente puede usar Agente+ para crear y hacer crecer su cartera mediante una rutina simple:
+Validar que un usuario inmobiliario independiente puede usar Agente+ para crear y hacer crecer su cartera mediante una rutina simple:
 
 ```text
 detectar oportunidad → decidir próximo paso → ejecutar → registrar resultado → continuar o cerrar
@@ -20,23 +20,24 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 |---|---|---|
 | Cuenta Demo | Implementada | Datos sintéticos aislados. |
 | Cuenta personal | Implementada localmente | Registro con email y contraseña; no aprobada aún para datos reales. |
-| Sesiones | Implementadas | Cookie HTTP-only, `SameSite=Lax`; `Secure` solo en producción. |
+| Sesiones | Implementadas | Token aleatorio hashado; cookie HTTP-only, `SameSite=Strict` y `Secure` en producción. |
 | Vista Hoy | Implementada | Oportunidades, conversaciones, captaciones y próximos pasos. |
 | Alta manual | Implementada | Fuente, enlace, propiedad, permiso, notas, canal, acción y fecha. |
 | Cartera | Implementada | Búsqueda, filtros por estado/barrio y ficha individual. |
 | Historial comercial | Implementado | Eventos explícitos; no se infieren resultados desde tareas. |
 | Contactos | Vista derivada implementada | El dato se guarda en la oportunidad; todavía no existe entidad independiente. |
 | Restricción “No contactar” | Implementada | Fuerza revisión interna y bloquea eventos comerciales en la API. |
+| Verificación de contacto en portales | Implementada localmente | Checklist, bloqueo, borrador copiable y control de servidor; sin envíos ni consulta automática de No Llame. |
 | Campañas | No implementadas | Solo existe una presentación demo y una vista informativa. |
 | Captación entrante | No implementada | Requiere formulario público, consentimiento y protección antiabuso. |
 | Goal Engine | No implementado | La meta demo es ilustrativa; no hay cálculo configurable. |
 | Métricas | Datos preparados | Se registran eventos; todavía no existe tablero ni ratios confiables. |
-| Radar de oportunidades | Implementado en Demo | Filtros, resultados sintéticos, guardado manual y deduplicación. |
-| API de Mercado Libre | Adaptador preparado, no activo | Requiere aplicación registrada, OAuth completo y validación del uso. |
-| Zonaprop/Argenprop | Sin integración | Solo existe una estrategia futura de acuerdo de metadatos. |
+| Radar de oportunidades | Implementado manualmente | Hallazgos privados, enlace original, revisión, descarte y conversión directa a oportunidad sin datos de contacto. Sin conexión a portales. |
+| API de Mercado Libre | Diferida | El Radar manual sigue activo; requiere consulta escrita que confirme el uso de captación, además de OAuth, seguridad y evidencia de pilotos. |
+| Zonaprop/Argenprop | Sin integración | Accesos manuales desde Radar; acuerdo de metadatos sólo como etapa futura. |
 | Mensajería/redes | Sin integración | Registro manual; ningún envío o lectura automática. |
 | Exportación/eliminación | No implementada | Requisito previo al piloto con datos reales. |
-| Producción segura | No implementada | Faltan hosting, HTTPS, base administrada, backups y operación. |
+| Producción segura | Parcial: staging endurecido | Origen HTTPS, cabeceras, límites de intentos, health check y precondiciones de arranque. Aún faltan hosting, base administrada, backups y operación. |
 
 ## Arquitectura actual
 
@@ -55,13 +56,14 @@ SQLite local: usuarios, sesiones, oportunidades, tareas y eventos
 - API y migraciones: `web/server/index.mjs`.
 - Base de desarrollo: `web/data/agente.sqlite`.
 - El directorio de datos está excluido de Git.
-- La API escucha en `127.0.0.1`; el puerto puede definirse con `PORT`.
+- En desarrollo la API escucha en `127.0.0.1`; en producción requiere `APP_ORIGIN` HTTPS y configuración explícita. Ver [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md).
 
 ## Modelo de dominio operativo
 
 ```text
 user
  ├── sessions
+ ├── radar_items
  ├── opportunities
  │    └── opportunity_events
  └── tasks ──► opportunity
@@ -78,9 +80,10 @@ La oportunidad contiene por ahora el dato de contacto. Separar una entidad `cont
 5. Los eventos comerciales se registran de forma deliberada y auditable.
 6. “No contactar” se respeta aunque la fuente o el dato sean públicos.
 7. No se implementan scraping, extracción de contactos, mensajes masivos ni publicaciones automáticas.
-8. Las fuentes externas se incorporan únicamente mediante API oficial, feed o acuerdo autorizado.
-9. Se minimizan datos personales; contacto, enlace y notas son opcionales cuando no resultan necesarios.
-10. No se cargan datos reales antes de completar los controles de producción.
+8. Para oportunidades de portal, un contacto saliente exige checklist `ready`; WhatsApp y llamada requieren constancia manual de verificación No Llame.
+9. El Radar manual conserva sólo referencias cargadas por el usuario; una integración externa futura requerirá API oficial, feed o acuerdo autorizado.
+10. Se minimizan datos personales; contacto, enlace y notas son opcionales cuando no resultan necesarios.
+11. No se cargan datos reales antes de completar los controles de producción.
 
 ## Evidencia técnica acumulada
 
@@ -96,7 +99,8 @@ Se verificaron:
 - rechazo `404` ante acceso cruzado entre cuentas;
 - rechazo `409` ante intento comercial sobre `do_not_contact`;
 - visualización responsive de Hoy, cartera, alta y ficha.
-- consulta del radar Demo, guardado manual y deduplicación `409`.
+- flujo manual de Radar: carga de hallazgo, revisión, descarte y conversión a oportunidad.
+- controles de staging: health check, rechazo de escrituras sin origen autorizado y cabeceras de seguridad de producción.
 
 El detalle reproducible está en [`INCREMENTO_CAPTACION_MANUAL.md`](INCREMENTO_CAPTACION_MANUAL.md).
 
@@ -131,13 +135,13 @@ Construir formulario público controlado por campaña y barrio, texto de consent
 
 **Criterio de salida:** una persona puede iniciar voluntariamente una consulta; el agente recibe una oportunidad trazable sin copiar datos desde terceros.
 
-### Etapa D — API oficial de Mercado Libre
+### Etapa D — Validar Radar manual
 
-**Estado:** modo Demo y adaptador implementados; conexión real pendiente.
+**Estado:** implementado localmente.
 
-El radar está limitado a campos y usos autorizados: filtros de inmuebles, metadatos mínimos, atribución y enlace profundo. No extrae contactos ni envía mensajes. Antes de activarlo faltan registro de aplicación, OAuth completo, credenciales protegidas y confirmación de compatibilidad del uso.
+El usuario navega manualmente los portales, carga una referencia mínima y conserva un enlace al aviso original. Un hallazgo en revisión puede convertirse directamente en oportunidad, con verificación de contacto pendiente. No hay consultas de servidor a terceros, datos de contacto en Radar ni mensajes automáticos. El detalle operativo y legal está en [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md).
 
-**Criterio de salida:** se puede medir relevancia, publicaciones abiertas, oportunidades guardadas, duplicados y tiempo ahorrado.
+**Criterio de salida:** se puede medir cuántos hallazgos se revisan, descartan o convierten y si se ahorra trabajo sin replicar catálogos.
 
 ### Etapa E — Tres pilotos y evidencia
 
@@ -172,7 +176,7 @@ Presentar un piloto de metadatos de 60–90 días, con alcance limitado, atribuc
 2. Campañas y metas configurables.
 3. Tablero de ratios cuando exista una muestra suficiente.
 4. Importación CSV controlada, si los pilotos la necesitan.
-5. Activación controlada del radar con la API oficial de Mercado Libre.
+5. Con tres pilotos y autorización escrita, evaluar una integración oficial de metadatos con un portal.
 
 ## Preguntas abiertas, no bloqueantes
 
@@ -184,4 +188,4 @@ Presentar un piloto de metadatos de 60–90 días, con alcance limitado, atribuc
 
 ## Próxima acción concreta
 
-Recorrer el flujo completo y el radar en Demo, usando oportunidades totalmente ficticias. Las observaciones deben convertirse en ajustes del circuito manual y de los filtros. En paralelo se puede iniciar el registro de la aplicación de Mercado Libre, sin activar datos reales hasta completar OAuth, seguridad y validación contractual.
+Recorrer el flujo completo de Radar manual con enlaces de prueba: cargar un hallazgo, revisarlo, descartarlo y convertirlo en oportunidad sin incorporar datos de contacto. Las observaciones deben convertirse en ajustes del circuito manual antes de evaluar integraciones externas.
