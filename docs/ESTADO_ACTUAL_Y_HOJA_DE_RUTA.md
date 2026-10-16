@@ -26,16 +26,17 @@ El piloto se limita a venta y alquiler residencial en Núñez, Saavedra, Villa U
 | Vista Hoy | Implementada | Oportunidades, conversaciones, captaciones y próximos pasos. |
 | Alta manual | Implementada | Fuente, enlace, propiedad, permiso, notas, canal, acción y fecha. |
 | Cartera | Implementada | Búsqueda, filtros por estado/barrio y ficha individual. |
+| CRM de captación | CRM-1 a CRM-4 implementados localmente | Bandeja operativa, señal manual de dueño directo, resultado estructurado, conversión auditable a Cliente y métricas con umbrales de muestra y prioridades explicables. |
 | Historial comercial | Implementado | Eventos explícitos; no se infieren resultados desde tareas. |
 | Contactos | Vista derivada implementada | El dato se carga manualmente en la oportunidad con origen y preferencia; todavía no existe entidad independiente. |
 | Restricción “No contactar” | Implementada | Fuerza revisión interna y bloquea eventos comerciales en la API. |
 | Verificación de contacto en portales | Implementada localmente | Checklist, bloqueo, borrador copiable y control de servidor; sin envíos ni consulta automática de No Llame. |
 | Seguimiento y precio manual | Implementado localmente | Preferencias “seguimiento acordado”, “latente”, “no continuar” y “no contactar”; tareas de revisión y observaciones de precio sin monitoreo externo. |
 | Campañas | No implementadas | Solo existe una presentación demo y una vista informativa. |
-| Captación entrante | No implementada | Requiere formulario público, consentimiento y protección antiabuso. |
+| Captación entrante | Implementada localmente | Formulario público mínimo por cuenta, consentimiento explícito, campo trampa, límites de frecuencia y creación trazable de oportunidad. Sin campañas ni respuestas automáticas. |
 | Goal Engine | No implementado | La meta demo es ilustrativa; no hay cálculo configurable. |
-| Métricas | Datos preparados | Se registran eventos; todavía no existe tablero ni ratios confiables. |
-| Radar de oportunidades | Implementado manualmente | Hallazgos privados, edición previa a conversión, enlace original, asistencia local para clasificar una URL, revisión, descarte y conversión directa a oportunidad sin datos de contacto. Sin conexión ni lectura de portales. |
+| Métricas | Implementadas localmente | Conteos derivados, umbrales para tasas y prioridades explicables; no concluyen rendimiento con muestras pequeñas. |
+| Radar de oportunidades | Implementado manualmente | Hallazgos privados, edición previa a conversión, enlace original, asistencia local para clasificar una URL, búsqueda asistida externa por dueño directo, revisión, descarte y conversión directa a oportunidad. Sin conexión ni lectura de portales. |
 | API de Mercado Libre | Diferida | El Radar manual sigue activo; requiere consulta escrita que confirme el uso de captación, además de OAuth, seguridad y evidencia de pilotos. |
 | Zonaprop/Argenprop | Sin integración | Accesos manuales desde Radar; acuerdo de metadatos sólo como etapa futura. |
 | Mensajería/redes | Sin integración | Registro manual; ningún envío o lectura automática. |
@@ -104,6 +105,7 @@ Se verificaron:
 - rechazo `409` ante intento comercial sobre `do_not_contact`;
 - visualización responsive de Hoy, cartera, alta y ficha.
 - flujo manual de Radar: carga de hallazgo, revisión, descarte y conversión a oportunidad.
+- formulario entrante aislado: enlace por cuenta, creación de oportunidad con fuente, origen y permiso `inbound`.
 - controles de staging: health check, rechazo de escrituras sin origen autorizado y cabeceras de seguridad de producción.
 
 El detalle reproducible está en [`INCREMENTO_CAPTACION_MANUAL.md`](INCREMENTO_CAPTACION_MANUAL.md).
@@ -134,6 +136,8 @@ Antes de almacenar datos personales:
 **Criterio de salida:** checklist de seguridad y privacidad aprobado y prueba de aislamiento automatizada.
 
 ### Etapa C — Captación entrante
+
+**Estado:** implementada localmente; pendiente de validación funcional con datos sintéticos antes de cualquier uso real.
 
 Construir formulario público controlado por campaña y barrio, texto de consentimiento versionado, confirmación, protección antiabuso y creación automática de oportunidad con fuente `Formulario entrante`.
 
@@ -176,8 +180,9 @@ Presentar un piloto de metadatos de 60–90 días, con alcance limitado, atribuc
 
 ### P1 — Después de validar manual
 
-1. Captación entrante.
-2. Campañas y metas configurables.
+1. Validar el flujo completo con datos sintéticos o autorizados antes de introducir automatizaciones o trabajo multiusuario.
+2. Captación entrante.
+3. Campañas y metas configurables.
 3. Tablero de ratios cuando exista una muestra suficiente.
 4. Importación CSV controlada, si los pilotos la necesitan.
 5. Con tres pilotos y autorización escrita, evaluar una integración oficial de metadatos con un portal.

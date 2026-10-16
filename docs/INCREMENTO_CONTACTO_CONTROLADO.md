@@ -30,7 +30,7 @@ En la ficha de una oportunidad cuya fuente sea Mercado Libre, Zonaprop, Argenpro
 - nota breve de verificación;
 - borrador editable de primer mensaje.
 
-No se guardan fotos ni textos completos del portal mediante este flujo. Los datos de contacto, si resultan legítimos y necesarios, se cargan manualmente más tarde en la oportunidad junto con su origen y preferencia de seguimiento; nunca se extraen del portal. Ver [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md).
+No se guardan fotos ni textos completos del portal mediante este flujo. Los datos de contacto nunca se extraen del portal: pueden cargarse manualmente en la oportunidad o, desde Radar, en campos privados explícitos que se trasladan como `Aviso a verificar` al convertir. Ver [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md).
 
 ## Reglas de bloqueo
 
@@ -71,3 +71,18 @@ El 2026-10-08 se comprobó con base y API temporales aisladas:
 ## Límites antes de datos reales
 
 Este incremento no habilita el uso de datos personales reales en la base local. Antes de operar con ellos siguen pendientes HTTPS, almacenamiento administrado, backups, controles de retención/eliminación, auditoría, aviso de privacidad y revisión legal del procedimiento de contacto.
+
+## Captación entrante mediante formulario
+
+Cada cuenta privada dispone de un enlace público opaco para el formulario **Solicitar asistencia**. El enlace se muestra únicamente en la ficha de una oportunidad y puede copiarse para compartirlo manualmente cuando sea adecuado. No se inserta ni se envía por sí solo en WhatsApp, email u otro canal.
+
+La persona que completa el formulario declara que autoriza el uso de los datos sólo para responder esa solicitud. El sistema crea una oportunidad aislada en la cuenta receptora con:
+
+- fuente `Formulario entrante`;
+- origen de contacto `Consulta entrante`;
+- permiso de contacto `inbound`;
+- próximo paso `Responder consulta entrante` y prioridad alta.
+
+Se solicitan datos mínimos: nombre, un único medio de contacto, zona, operación, tipo de inmueble y un mensaje opcional. El formulario contiene un campo trampa y límites de frecuencia básicos para reducir envíos automatizados. No crea campañas, no envía respuestas automáticas ni convierte el consentimiento para responder una consulta en autorización para comunicaciones promocionales posteriores.
+
+El borrador de primer contacto puede incluir el enlace, pero sólo después de que el checklist de fuente, restricciones del aviso y —cuando corresponda— No Llame esté en estado `ready`.

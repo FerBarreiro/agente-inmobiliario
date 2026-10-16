@@ -37,7 +37,18 @@ Por ahora no se agregan botones de Facebook, Instagram, Marketplace ni grupos. E
 
 ### 1. Navegar fuera de Agente+
 
-La vista Radar muestra enlaces externos a los tres portales iniciales. Al hacer clic, el usuario navega por su cuenta en una pestaña nueva y usa los filtros de ese portal. El producto no envía criterios de búsqueda, no lee la página resultante ni conserva el historial de navegación.
+La vista Radar muestra enlaces externos a los tres portales iniciales. Al hacer clic, el usuario navega por su cuenta en una pestaña nueva y usa los filtros de ese portal. El producto no lee la página resultante ni conserva el historial de navegación.
+
+### Búsqueda asistida en la web
+
+Radar también permite elegir zona, operación y tipo para abrir una consulta en un buscador web con el criterio **“dueño directo”**. Es un atajo de navegación para que el usuario vea el listado que ofrece el buscador, no una integración de resultados:
+
+1. el criterio se envía únicamente al buscador elegido al abrir la nueva pestaña;
+2. Agente+ no recibe títulos, precios, URLs, contactos ni resultados de esa página;
+3. la aplicación no afirma que un resultado sea efectivamente dueño directo ni que continúe publicado;
+4. sólo después de revisar el aviso original el usuario puede pegar su URL o crear un hallazgo manual.
+
+Por lo tanto, no se crea un catálogo dentro de Agente+, no se automatiza la búsqueda y no se eluden términos, límites de acceso ni restricciones de portales.
 
 ### 2. Cargar un hallazgo
 
@@ -49,8 +60,9 @@ El botón **Cargar hallazgo** crea una tarjeta privada con:
 - barrio, operación y tipo de propiedad;
 - precio orientativo y moneda, si resultan útiles;
 - observaciones propias y mínimas.
+- teléfono/WhatsApp y email **sólo si el usuario los carga manualmente** en los campos privados específicos.
 
-No admite datos de contacto. Tampoco se deben pegar descripciones completas, fotografías, recorridos virtuales ni otros elementos del aviso que no hagan falta para decidir una revisión.
+La aplicación no lee, interpreta ni extrae contactos desde el aviso, la URL o las observaciones. Tampoco se deben pegar descripciones completas, fotografías, recorridos virtuales ni otros elementos del aviso que no hagan falta para decidir una revisión. Cargar un dato publicado no equivale a permiso para contactarlo.
 
 ### Asistencia desde enlace
 
@@ -58,7 +70,7 @@ El usuario puede pegar primero la URL del aviso. La interfaz interpreta sólo es
 
 ### 3. Editar, revisar, descartar o convertir
 
-Cada tarjeta que todavía no fue convertida ofrece **Editar hallazgo** además de **Ver oportunidad**, que abre la URL original. Editar abre el mismo formulario precargado y permite corregir referencia, enlace, clasificación, precio y notas. La operación se limita a la cuenta dueña del hallazgo y conserva su estado actual. Un hallazgo convertido se edita desde la oportunidad resultante, para no alterar retrospectivamente el registro de Radar.
+Cada tarjeta que todavía no fue convertida ofrece **Editar hallazgo** además de **Ver oportunidad**, que abre la URL original. Editar abre el mismo formulario precargado y permite corregir referencia, enlace, clasificación, precio, contactos manuales y notas. La operación se limita a la cuenta dueña del hallazgo y conserva su estado actual. Un hallazgo convertido se edita desde la oportunidad resultante, para no alterar retrospectivamente el registro de Radar.
 
 La actualización usa `PUT /api/radar-items/:id`. El servidor vuelve a validar todos los campos, filtra el registro por la cuenta autenticada y rechaza con `409` la edición de un hallazgo ya convertido.
 
@@ -66,12 +78,12 @@ Los estados son:
 
 | Estado | Significado | Datos personales |
 |---|---|---|
-| Hallazgo | Enlace guardado para no perderlo. | No se guardan. |
-| En revisión | El usuario considera revisarlo en la fuente original. | No se guardan. |
-| Oportunidad creada | Se convirtió desde el Radar y se registró el paso de verificación de contacto. | No se trasladan datos de contacto. |
-| Descartada | No continuará en el flujo. Puede reactivarse. | No se guardan. |
+| Hallazgo | Enlace guardado para no perderlo. | Sólo los campos manuales mínimos, si el usuario decidió cargarlos. |
+| En revisión | El usuario considera revisarlo en la fuente original. | Se mantienen privados y no habilitan contacto. |
+| Oportunidad creada | Se convirtió desde el Radar y se registró el paso de verificación de contacto. | Teléfono/WhatsApp y email manuales se trasladan separados con origen `Aviso a verificar`. |
+| Descartada | No continuará en el flujo. Puede reactivarse. | Se mantienen privados dentro de la cuenta. |
 
-Al elegir **Convertir en oportunidad**, el sistema crea de inmediato una oportunidad con los datos mínimos ya cargados y el próximo paso **Completar verificación de contacto**. No copia datos personales, no envía mensajes ni da por autorizado un contacto. Si el hallazgo tenía precio orientativo, éste se conserva como la primera **observación manual de precio**, no como un monitoreo del portal. El hallazgo sale de la bandeja activa del Radar y aparece en **Oportunidades**; queda marcado como convertido para evitar duplicados.
+Al elegir **Convertir en oportunidad**, el sistema crea de inmediato una oportunidad con los datos mínimos ya cargados y el próximo paso **Completar verificación de contacto**. Si el usuario cargó manualmente teléfono/WhatsApp o email en los campos específicos del Radar, se trasladan separados y se marcan como `Aviso a verificar`; no se infieren desde notas ni se consideran autorización. No se envían mensajes ni se habilita contacto. Si el hallazgo tenía precio orientativo, éste se conserva como la primera **observación manual de precio**, no como un monitoreo del portal. El hallazgo sale de la bandeja activa del Radar y aparece en **Oportunidades**; queda marcado como convertido para evitar duplicados.
 
 ## Contacto: barrera obligatoria
 
@@ -117,6 +129,19 @@ La API local creó la tabla `radar_items`, aislada por `user_id`. Sus endpoints 
 | `POST /api/radar-items/:id/convert` | Convierte un hallazgo en revisión en oportunidad, crea el próximo paso de verificación y actualiza su estado en una misma transacción. |
 
 No existen credenciales externas, variables de entorno de proveedores ni llamadas de servidor a Mercado Libre, Zonaprop, Argenprop o redes sociales en este flujo.
+
+## Jerarquía de lectura de la tarjeta
+
+La tarjeta del Radar está diseñada para decidir rápidamente si un hallazgo merece el siguiente paso, sin convertir la bandeja en una ficha completa ni exponer observaciones privadas de manera innecesaria. El orden es:
+
+1. **Estado** visible y con color discreto: Hallazgo, En revisión o Descartada.
+2. **Origen** y método de carga como contexto secundario, no como contenido principal.
+3. **Título**, ubicación, tipo y operación para identificar el inmueble.
+4. **Precio** como dato comercial escaneable.
+5. Indicador de que existe una observación privada, sin mostrar su texto en la grilla; se consulta y edita sólo al abrir **Editar**.
+6. Un único CTA principal según el estado: revisar, convertir en oportunidad o restaurar. Abrir el aviso original, editar y descartar quedan como acciones de menor jerarquía.
+
+Esta estructura reduce competencia entre botones, facilita el escaneo de varias tarjetas y limita la exposición casual de notas que podrían contener información sensible ingresada por el usuario.
 
 ## Verificación realizada
 

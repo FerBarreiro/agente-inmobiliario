@@ -31,10 +31,11 @@ Este directorio separa deliberadamente la visión futura, las decisiones vigente
 | [`IMPLEMENTACION_INICIAL.md`](IMPLEMENTACION_INICIAL.md) | Registro del primer prototipo del 2026-10-07. | Histórico; no representa por sí solo el estado actual. |
 | [`INCREMENTO_CAPTACION_MANUAL.md`](INCREMENTO_CAPTACION_MANUAL.md) | Especificación y evidencia del incremento del 2026-10-08. | Implementado y verificado localmente. |
 | [`INCREMENTO_RADAR_OPORTUNIDADES.md`](INCREMENTO_RADAR_OPORTUNIDADES.md) | Radar manual, hallazgos privados y conversión controlada a oportunidad. | Implementado localmente; sin conexión a portales. |
-| [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md) | Checklist de contacto y borrador copiable. | Implementado localmente; sin envíos ni datos reales. |
+| [`INCREMENTO_CONTACTO_CONTROLADO.md`](INCREMENTO_CONTACTO_CONTROLADO.md) | Checklist de contacto, borrador copiable y formulario de asistencia entrante por cuenta. | Implementado localmente; sin envíos ni datos reales. |
 | [`AUTENTICACION_Y_DATOS.md`](AUTENTICACION_Y_DATOS.md) | Arquitectura de cuenta, datos y seguridad. | Implementación local; activación externa pendiente. |
 | [`RECUPERACION_CONTRASENA.md`](RECUPERACION_CONTRASENA.md) | Restablecimiento de contraseña, tokens y correo transaccional. | Implementado y probado localmente; envío externo pendiente. |
 | [`INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md`](INCREMENTO_SEGUIMIENTO_Y_PRECIOS.md) | Contacto manual, preferencias, tareas de revisión y precio observado. | Implementado y verificado localmente; sin monitoreo o contacto automático. |
+| [`CRM_CAPTACION_Y_HOJA_DE_RUTA.md`](CRM_CAPTACION_Y_HOJA_DE_RUTA.md) | Definición de CRM de oportunidades, campos, filtros y secuencia de implementación. | CRM-1 a CRM-4 implementados localmente. |
 | [`INCREMENTO_ASISTENCIA_ENLACE.md`](INCREMENTO_ASISTENCIA_ENLACE.md) | Clasificación local de una URL y procedencia de carga en Radar. | Implementado localmente; sin solicitudes a portales ni extracción de contenido. |
 | [`PRODUCCION_SEGURA.md`](PRODUCCION_SEGURA.md) | Endurecimiento de producción y precondiciones de datos reales. | Implementado; requiere verificación operativa antes de activarse. |
 | [`DESPLIEGUE_RENDER_NEON.md`](DESPLIEGUE_RENDER_NEON.md) | Configuración versionada y activación segura de Render + Neon. | Render promueve desde `main`; `dev` queda para desarrollo local. No habilita datos personales reales. |

@@ -33,7 +33,7 @@ await db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,
     password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL, public_form_token TEXT NOT NULL DEFAULT ''
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -81,6 +81,15 @@ await db.exec(`
     observed_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS clients (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source_opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE RESTRICT,
+    conversion_reason TEXT NOT NULL,
+    converted_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, source_opportunity_id)
+  );
 `)
 
 async function ensureColumn(table, column, definition) {
@@ -96,6 +105,8 @@ await ensureColumn('opportunities', 'property_type', "TEXT NOT NULL DEFAULT 'Dep
 await ensureColumn('opportunities', 'source', "TEXT NOT NULL DEFAULT 'Carga manual'")
 await ensureColumn('opportunities', 'source_url', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('opportunities', 'contact_detail', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_phone', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'contact_email', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('opportunities', 'contact_permission', "TEXT NOT NULL DEFAULT 'unknown'")
 await ensureColumn('opportunities', 'notes', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('opportunities', 'next_step_date', "TEXT NOT NULL DEFAULT ''")
@@ -115,9 +126,13 @@ await ensureColumn('opportunities', 'contact_origin', "TEXT NOT NULL DEFAULT 'no
 await ensureColumn('opportunities', 'contact_preference', "TEXT NOT NULL DEFAULT 'not_contacted'")
 await ensureColumn('opportunities', 'contact_follow_up_at', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('opportunities', 'contact_preference_note', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('opportunities', 'client_id', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('radar_items', 'capture_method', "TEXT NOT NULL DEFAULT 'manual'")
+await ensureColumn('radar_items', 'contact_phone', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('radar_items', 'contact_email', "TEXT NOT NULL DEFAULT ''")
 await ensureColumn('tasks', 'opportunity_id', 'TEXT')
 await ensureColumn('tasks', 'due_at', "TEXT NOT NULL DEFAULT ''")
+await ensureColumn('users', 'public_form_token', "TEXT NOT NULL DEFAULT ''")
 await db.prepare("UPDATE opportunities SET contact_preference = 'do_not_contact' WHERE contact_permission = 'do_not_contact' AND contact_preference = 'not_contacted'").run()
 
 await db.exec(`
@@ -138,7 +153,11 @@ await db.exec(`
   CREATE INDEX IF NOT EXISTS radar_items_user_index ON radar_items(user_id, state, updated_at DESC);
   CREATE INDEX IF NOT EXISTS password_reset_tokens_user_index ON password_reset_tokens(user_id, expires_at DESC);
   CREATE INDEX IF NOT EXISTS price_observations_opportunity_index ON opportunity_price_observations(opportunity_id, observed_at DESC);
+  CREATE INDEX IF NOT EXISTS clients_user_index ON clients(user_id, converted_at DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS users_public_form_token_unique ON users(public_form_token) WHERE public_form_token <> '';
 `)
+await ensureColumn('opportunities', 'owner_direct_status', "TEXT NOT NULL DEFAULT 'a_verificar'")
+await ensureColumn('opportunity_events', 'contact_result', "TEXT NOT NULL DEFAULT ''")
 
 const NEIGHBORHOODS = ['Núñez', 'Saavedra', 'Villa Urquiza', 'Coghlan', 'Belgrano']
 const OPERATIONS = ['Venta', 'Alquiler']
@@ -150,6 +169,23 @@ const CONTACT_ORIGINS = ['not_recorded', 'directly_provided', 'inbound', 'prior_
 const CONTACT_PREFERENCES = ['not_contacted', 'follow_up_agreed', 'latent', 'not_continue', 'do_not_contact']
 const CHANNELS = ['WhatsApp', 'Llamada', 'Instagram', 'Email', 'Presencial', 'Sin canal']
 const CONTACT_POLICIES = ['not_started', 'allows_agents', 'no_agents']
+const OWNER_DIRECT_STATUSES = ['a_verificar', 'declarado_en_aviso', 'no_aplica']
+const CONTACT_RESULTS = ['sin_respuesta', 'interesado', 'seguimiento_acordado', 'latente', 'no_continuar', 'no_contactar']
+const CLIENT_CONVERSION_REASONS = ['captacion_confirmada', 'tasacion_solicitada', 'acuerdo_comercial', 'otro_confirmado']
+const CLIENT_CONVERSION_LABELS = {
+  captacion_confirmada: 'Captación confirmada',
+  tasacion_solicitada: 'Tasación solicitada formalmente',
+  acuerdo_comercial: 'Acuerdo comercial confirmado',
+  otro_confirmado: 'Otro vínculo comercial confirmado',
+}
+const CONTACT_RESULT_META = {
+  sin_respuesta: { label: 'Sin respuesta', preference: null },
+  interesado: { label: 'Interesado', preference: null },
+  seguimiento_acordado: { label: 'Seguimiento acordado', preference: 'follow_up_agreed' },
+  latente: { label: 'Latente', preference: 'latent' },
+  no_continuar: { label: 'No continuar', preference: 'not_continue' },
+  no_contactar: { label: 'No contactar', preference: 'do_not_contact' },
+}
 // "Otro" is deliberately included: a manually reviewed link from an
 // unclassified portal should receive the same conservative contact controls.
 const PORTAL_SOURCES = ['Mercado Libre', 'Zonaprop', 'Argenprop', 'Otro']
@@ -170,6 +206,9 @@ const validUrl = (value) => {
   if (!value) return true
   try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
 }
+const validPhone = (value) => !value || String(value).replace(/\D/g, '').length >= 6
+const validEmail = (value) => !value || /^\S+@\S+\.\S+$/.test(String(value))
+const contactDisplay = (phone, email, fallback = '') => [phone, email].filter(Boolean).join(' · ') || fallback
 const validLocalDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime())
 function contactPermissionFor(contactPreference, contactOrigin) {
   if (contactPreference === 'do_not_contact') return 'do_not_contact'
@@ -190,10 +229,13 @@ function preparationStatus({ sourceReviewed, listingPolicy, channel, noLlameChec
 const withTransaction = async (operation) => db.transaction(operation)
 
 const getUserByEmail = db.prepare('SELECT * FROM users WHERE email = ?')
-const getUserById = db.prepare('SELECT id, email, display_name, role FROM users WHERE id = ?')
+const getUserById = db.prepare('SELECT id, email, display_name, role, public_form_token AS "publicFormToken" FROM users WHERE id = ?')
+const getUserByPublicFormToken = db.prepare('SELECT id, email, display_name, role, public_form_token AS "publicFormToken" FROM users WHERE public_form_token = ?')
+const listUsersWithoutPublicFormToken = db.prepare("SELECT id FROM users WHERE public_form_token = ''")
 const insertUser = db.prepare('INSERT INTO users (id, email, display_name, password_hash, password_salt, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
 const updateUserDisplayName = db.prepare('UPDATE users SET display_name = ? WHERE id = ?')
 const updateUserPassword = db.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?')
+const updateUserPublicFormToken = db.prepare('UPDATE users SET public_form_token = ? WHERE id = ? AND public_form_token = \'\'')
 const insertSession = db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
 const deleteSession = db.prepare('DELETE FROM sessions WHERE token_hash = ?')
 const deleteUserSessions = db.prepare('DELETE FROM sessions WHERE user_id = ?')
@@ -207,7 +249,7 @@ const deleteExpiredPasswordResetTokens = db.prepare('DELETE FROM password_reset_
 const opportunityFields = `
   id, name, neighborhood, operation, status, reason, score,
   next_step AS "nextStep", property_type AS "propertyType", source, source_url AS "sourceUrl",
-  contact_detail AS "contactDetail", contact_permission AS "contactPermission", notes,
+  contact_detail AS "contactDetail", contact_phone AS "contactPhone", contact_email AS "contactEmail", contact_permission AS "contactPermission", notes,
   next_step_date AS "nextStepDate", created_at AS "createdAt", updated_at AS "updatedAt",
   closed_at AS "closedAt", external_source AS "externalSource", external_id AS "externalId",
   contact_source_reviewed AS "contactSourceReviewed", contact_listing_policy AS "contactListingPolicy",
@@ -216,31 +258,38 @@ const opportunityFields = `
   contact_preparation_status AS "contactPreparationStatus",
   contact_preparation_updated_at AS "contactPreparationUpdatedAt",
   contact_origin AS "contactOrigin", contact_preference AS "contactPreference",
-  contact_follow_up_at AS "contactFollowUpAt", contact_preference_note AS "contactPreferenceNote"
+  contact_follow_up_at AS "contactFollowUpAt", contact_preference_note AS "contactPreferenceNote",
+  owner_direct_status AS "ownerDirectStatus", client_id AS "clientId"
 `
 const listOpportunities = db.prepare(`SELECT ${opportunityFields} FROM opportunities WHERE user_id = ? ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC`)
 const getOpportunity = db.prepare(`SELECT ${opportunityFields} FROM opportunities WHERE id = ? AND user_id = ?`)
 const listTasks = db.prepare('SELECT id, opportunity_id AS "opportunityId", title, contact, due, due_at AS "dueAt", channel, state, priority FROM tasks WHERE user_id = ? ORDER BY state ASC, COALESCE(NULLIF(due_at, \'\'), created_at) ASC')
-const listEvents = db.prepare('SELECT id, opportunity_id AS "opportunityId", event_type AS "eventType", label, notes, channel, created_at AS "createdAt" FROM opportunity_events WHERE user_id = ? ORDER BY created_at DESC')
+const listEvents = db.prepare('SELECT id, opportunity_id AS "opportunityId", event_type AS "eventType", label, notes, channel, contact_result AS "contactResult", created_at AS "createdAt" FROM opportunity_events WHERE user_id = ? ORDER BY created_at DESC')
 const listPriceObservations = db.prepare('SELECT id, opportunity_id AS "opportunityId", amount, currency, observed_at AS "observedAt", created_at AS "createdAt" FROM opportunity_price_observations WHERE user_id = ? ORDER BY observed_at DESC, created_at DESC')
+const listClients = db.prepare(`
+  SELECT c.id, c.source_opportunity_id AS "opportunityId", c.conversion_reason AS "conversionReason",
+    c.converted_at AS "convertedAt", o.name, o.neighborhood, o.operation, o.property_type AS "propertyType", o.status
+  FROM clients c JOIN opportunities o ON o.id = c.source_opportunity_id
+  WHERE c.user_id = ? ORDER BY c.converted_at DESC
+`)
 const getOpportunityByExternal = db.prepare('SELECT id FROM opportunities WHERE user_id = ? AND external_source = ? AND external_id = ?')
 const radarItemFields = `
   id, title, neighborhood, operation, property_type AS "propertyType", source,
   source_url AS "sourceUrl", price_amount AS "priceAmount", currency, notes, state,
-  capture_method AS "captureMethod", created_at AS "createdAt", updated_at AS "updatedAt"
+  capture_method AS "captureMethod", contact_phone AS "contactPhone", contact_email AS "contactEmail", created_at AS "createdAt", updated_at AS "updatedAt"
 `
 const listRadarItems = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE user_id = ? ORDER BY updated_at DESC`)
 const getRadarItem = db.prepare(`SELECT ${radarItemFields} FROM radar_items WHERE id = ? AND user_id = ?`)
 const insertRadarItem = db.prepare(`
   INSERT INTO radar_items (
     id, user_id, title, neighborhood, operation, property_type, source, source_url,
-    price_amount, currency, notes, capture_method, state, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    price_amount, currency, notes, capture_method, contact_phone, contact_email, state, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
 const updateRadarItem = db.prepare(`
   UPDATE radar_items SET
     title = ?, neighborhood = ?, operation = ?, property_type = ?, source = ?, source_url = ?,
-    price_amount = ?, currency = ?, notes = ?, capture_method = ?, updated_at = ?
+    price_amount = ?, currency = ?, notes = ?, capture_method = ?, contact_phone = ?, contact_email = ?, updated_at = ?
   WHERE id = ? AND user_id = ?
 `)
 const updateRadarItemState = db.prepare('UPDATE radar_items SET state = ?, updated_at = ? WHERE id = ? AND user_id = ?')
@@ -253,10 +302,15 @@ const insertOpportunity = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
 const insertTask = db.prepare('INSERT INTO tasks (id, user_id, title, contact, due, channel, state, priority, created_at, opportunity_id, due_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-const insertEvent = db.prepare('INSERT INTO opportunity_events (id, user_id, opportunity_id, event_type, label, notes, channel, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+const insertEvent = db.prepare('INSERT INTO opportunity_events (id, user_id, opportunity_id, event_type, label, notes, channel, contact_result, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
 const insertPriceObservation = db.prepare('INSERT INTO opportunity_price_observations (id, user_id, opportunity_id, amount, currency, observed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+const insertClient = db.prepare('INSERT INTO clients (id, user_id, source_opportunity_id, conversion_reason, converted_at, created_at) VALUES (?, ?, ?, ?, ?, ?)')
 const updateOpportunityProgress = db.prepare('UPDATE opportunities SET status = ?, reason = ?, next_step = ?, next_step_date = ?, updated_at = ?, closed_at = ? WHERE id = ? AND user_id = ?')
-const updateContactRecord = db.prepare('UPDATE opportunities SET contact_detail = ?, contact_permission = ?, contact_origin = ?, contact_preference = ?, contact_follow_up_at = ?, contact_preference_note = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+const updateContactRecord = db.prepare('UPDATE opportunities SET contact_detail = ?, contact_phone = ?, contact_email = ?, contact_permission = ?, contact_origin = ?, contact_preference = ?, contact_follow_up_at = ?, contact_preference_note = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+const updateContactOutcome = db.prepare('UPDATE opportunities SET contact_permission = ?, contact_preference = ?, contact_follow_up_at = ?, contact_preference_note = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+const updateOpportunityContactChannels = db.prepare('UPDATE opportunities SET contact_detail = ?, contact_phone = ?, contact_email = ?, contact_origin = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+const updateOwnerDirectStatus = db.prepare('UPDATE opportunities SET owner_direct_status = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+const updateOpportunityClient = db.prepare("UPDATE opportunities SET client_id = ?, status = 'Cliente confirmado', reason = ?, next_step = ?, next_step_date = ?, updated_at = ?, closed_at = NULL WHERE id = ? AND user_id = ?")
 const updateContactPreparation = db.prepare(`
   UPDATE opportunities SET
     contact_source_reviewed = ?, contact_listing_policy = ?, no_llame_checked_at = ?,
@@ -284,8 +338,15 @@ async function createUser({ email, displayName, password, role = 'agent' }) {
   return await getUserById.get(id)
 }
 
-async function addEvent(userId, opportunityId, eventType, label, notes = '', channel = 'Sin canal', createdAt = now()) {
-  await insertEvent.run(randomUUID(), userId, opportunityId, eventType, label, notes, channel, createdAt)
+async function ensurePublicFormToken(user) {
+  if (user.publicFormToken) return user.publicFormToken
+  const token = randomBytes(18).toString('base64url')
+  await updateUserPublicFormToken.run(token, user.id)
+  return token
+}
+
+async function addEvent(userId, opportunityId, eventType, label, notes = '', channel = 'Sin canal', createdAt = now(), contactResult = '') {
+  await insertEvent.run(randomUUID(), userId, opportunityId, eventType, label, notes, channel, contactResult, createdAt)
 }
 
 async function addTask(userId, opportunityId, title, contact, dueAt, channel, priority = 'Media') {
@@ -441,7 +502,7 @@ async function dashboard(user) {
     events: byOpportunity.get(opportunity.id) ?? [],
     priceObservations: pricesByOpportunity.get(opportunity.id) ?? [],
   }))
-  return { user: publicUser(user), opportunities, tasks: await listTasks.all(user.id) }
+  return { user: publicUser(user), opportunities, tasks: await listTasks.all(user.id), clients: await listClients.all(user.id) }
 }
 
 async function createSession(response, user) {
@@ -508,6 +569,7 @@ async function serveStatic(request, response, pathname) {
 }
 
 await seedDemo()
+for (const user of await listUsersWithoutPublicFormToken.all()) await ensurePublicFormToken(user)
 await backfillDetectedEvents()
 
 const server = createServer(async (request, response) => {
@@ -601,6 +663,42 @@ const server = createServer(async (request, response) => {
       await updateUserDisplayName.run(displayName, user.id)
       return sendJson(response, 200, { user: publicUser(await getUserById.get(user.id)) })
     }
+    if (request.method === 'GET' && url.pathname === '/api/account/inbound-form') {
+      const user = await requireUser(request, response); if (!user) return
+      if (user.role === 'demo') return sendJson(response, 403, { error: 'La cuenta Demo no publica formularios de captación.' })
+      const token = await ensurePublicFormToken(user)
+      const origin = appOrigin || `http://${request.headers.host}`
+      const formUrl = new URL('/solicitar-asistencia', origin)
+      formUrl.searchParams.set('para', token)
+      return sendJson(response, 200, { url: formUrl.toString() })
+    }
+    const inboundFormMatch = url.pathname.match(/^\/api\/inbound-requests\/([A-Za-z0-9_-]{20,80})$/)
+    if (request.method === 'POST' && inboundFormMatch) {
+      if (!allowRate(request, response, 'inbound-form', 5, 15 * 60 * 1_000)) return
+      const token = inboundFormMatch[1]
+      if (!allowRateKey(response, 'inbound-form-token', token, 10, 15 * 60 * 1_000)) return
+      const owner = await getUserByPublicFormToken.get(token)
+      if (!owner || owner.role === 'demo') return sendJson(response, 404, { error: 'El formulario solicitado no está disponible.' })
+      const body = await readBody(request)
+      if (clean(body.company, 100)) return sendJson(response, 202, { message: 'Solicitud recibida.' })
+      const name = clean(body.name, 80)
+      const contactDetail = clean(body.contactDetail, 250)
+      const neighborhood = clean(body.neighborhood, 40)
+      const operation = clean(body.operation, 20)
+      const propertyType = clean(body.propertyType, 30)
+      const message = clean(body.message, 1000)
+      if (name.length < 2 || contactDetail.length < 6 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || body.consent !== true) return sendJson(response, 400, { error: 'Completá nombre, un medio de contacto, zona, operación, tipo de inmueble y la autorización del formulario.' })
+      const opportunityId = randomUUID()
+      const createdAt = now()
+      const nextStep = 'Responder consulta entrante'
+      const reason = 'Solicitud voluntaria recibida mediante el formulario de asistencia.'
+      await withTransaction(async () => {
+        await insertOpportunity.run(opportunityId, owner.id, name, neighborhood, operation, 'Detectada', reason, 78, nextStep, createdAt, propertyType, 'Formulario entrante', '', contactDetail, 'inbound', message, createdAt.slice(0, 10), createdAt, null, '', '', 'inbound', 'not_contacted', '', 'Consentimiento declarado en el formulario de asistencia.')
+        await addEvent(owner.id, opportunityId, 'inbound_request_received', 'Solicitud entrante recibida', 'La persona completó voluntariamente el formulario de asistencia.', 'Formulario', createdAt)
+        await addTask(owner.id, opportunityId, nextStep, name, createdAt.slice(0, 10), 'Formulario', 'Alta')
+      })
+      return sendJson(response, 201, { message: 'Recibimos tu solicitud. Te responderán por el medio de contacto que indicaste.' })
+    }
     if (request.method === 'PUT' && url.pathname === '/api/account/password') {
       const user = await requireUser(request, response); if (!user) return
       if (user.role === 'demo') return sendJson(response, 403, { error: 'La contraseña de la cuenta Demo no se puede modificar.' })
@@ -639,13 +737,16 @@ const server = createServer(async (request, response) => {
       const currency = clean(body.currency || 'USD', 10)
       const notes = clean(body.notes, 1200)
       const captureMethod = clean(body.captureMethod || 'manual', 30)
+      const contactPhone = clean(body.contactPhone, 100)
+      const contactEmail = clean(body.contactEmail, 254).toLowerCase()
       if (title.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !RADAR_SOURCES.includes(source) || !validUrl(sourceUrl) || !sourceUrl) return sendJson(response, 400, { error: 'Completá referencia, zona, operación, tipo, portal y enlace válido.' })
       if (priceAmount !== null && (!Number.isInteger(priceAmount) || priceAmount <= 0)) return sendJson(response, 400, { error: 'El precio debe ser un número entero positivo.' })
       if (!['USD', 'ARS'].includes(currency)) return sendJson(response, 400, { error: 'Elegí una moneda válida.' })
       if (!RADAR_CAPTURE_METHODS.includes(captureMethod)) return sendJson(response, 400, { error: 'El método de carga no es válido.' })
+      if (!validPhone(contactPhone) || !validEmail(contactEmail)) return sendJson(response, 400, { error: 'Revisá el teléfono o email cargado manualmente.' })
       const id = randomUUID()
       const createdAt = now()
-      await insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, 'detected', createdAt, createdAt)
+      await insertRadarItem.run(id, user.id, title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, contactPhone, contactEmail, 'detected', createdAt, createdAt)
       return sendJson(response, 201, { items: await listRadarItems.all(user.id) })
     }
 
@@ -667,11 +768,14 @@ const server = createServer(async (request, response) => {
       const currency = clean(body.currency || 'USD', 10)
       const notes = clean(body.notes, 1200)
       const captureMethod = clean(body.captureMethod || 'manual', 30)
+      const contactPhone = clean(body.contactPhone, 100)
+      const contactEmail = clean(body.contactEmail, 254).toLowerCase()
       if (title.length < 2 || !NEIGHBORHOODS.includes(neighborhood) || !OPERATIONS.includes(operation) || !PROPERTY_TYPES.includes(propertyType) || !RADAR_SOURCES.includes(source) || !validUrl(sourceUrl) || !sourceUrl) return sendJson(response, 400, { error: 'Completá referencia, zona, operación, tipo, portal y enlace válido.' })
       if (priceAmount !== null && (!Number.isInteger(priceAmount) || priceAmount <= 0)) return sendJson(response, 400, { error: 'El precio debe ser un número entero positivo.' })
       if (!['USD', 'ARS'].includes(currency)) return sendJson(response, 400, { error: 'Elegí una moneda válida.' })
       if (!RADAR_CAPTURE_METHODS.includes(captureMethod)) return sendJson(response, 400, { error: 'El método de carga no es válido.' })
-      await updateRadarItem.run(title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, now(), item.id, user.id)
+      if (!validPhone(contactPhone) || !validEmail(contactEmail)) return sendJson(response, 400, { error: 'Revisá el teléfono o email cargado manualmente.' })
+      await updateRadarItem.run(title, neighborhood, operation, propertyType, source, sourceUrl, priceAmount, currency, notes, captureMethod, contactPhone, contactEmail, now(), item.id, user.id)
       return sendJson(response, 200, { items: await listRadarItems.all(user.id) })
     }
 
@@ -702,10 +806,13 @@ const server = createServer(async (request, response) => {
       const nextStep = 'Completar verificación de contacto'
       const nextStepDate = createdAt.slice(0, 10)
       const notes = `Creada desde Radar. ${item.notes}`.trim()
+      const contactDetail = contactDisplay(item.contactPhone, item.contactEmail)
+      const contactOrigin = contactDetail ? 'listing_to_verify' : 'not_recorded'
       await withTransaction(async () => {
-        await insertOpportunity.run(opportunityId, user.id, item.title, item.neighborhood, item.operation, 'Detectada', 'Hallazgo manual revisado; pendiente de verificación antes de cualquier contacto.', 58, nextStep, createdAt, item.propertyType, item.source, item.sourceUrl, '', 'unknown', notes, nextStepDate, createdAt, null, '', '', 'not_recorded', 'not_contacted', '', '')
+        await insertOpportunity.run(opportunityId, user.id, item.title, item.neighborhood, item.operation, 'Detectada', 'Hallazgo manual revisado; pendiente de verificación antes de cualquier contacto.', 58, nextStep, createdAt, item.propertyType, item.source, item.sourceUrl, contactDetail, 'unknown', notes, nextStepDate, createdAt, null, '', '', contactOrigin, 'not_contacted', '', '')
+        if (contactDetail) await updateOpportunityContactChannels.run(contactDetail, item.contactPhone, item.contactEmail, contactOrigin, createdAt, opportunityId, user.id)
         if (item.priceAmount !== null) await insertPriceObservation.run(randomUUID(), user.id, opportunityId, item.priceAmount, item.currency, createdAt.slice(0, 10), createdAt)
-        await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. ${item.captureMethod === 'url_assisted' ? 'Enlace clasificado localmente; contenido pendiente de revisión.' : 'Carga manual.'} Sin datos de contacto.`, 'Sin canal', createdAt)
+        await addEvent(user.id, opportunityId, 'opportunity_detected', 'Oportunidad convertida desde Radar', `Fuente: ${item.source}. ${item.captureMethod === 'url_assisted' ? 'Enlace clasificado localmente; contenido pendiente de revisión.' : 'Carga manual.'}${contactDetail ? ' Datos de contacto manuales transferidos; requieren verificación antes de uso.' : ' Sin datos de contacto.'}`, 'Sin canal', createdAt)
         await addTask(user.id, opportunityId, nextStep, item.title, nextStepDate, 'Sin canal')
         await updateRadarItemState.run('converted', createdAt, item.id, user.id)
       })
@@ -775,12 +882,15 @@ const server = createServer(async (request, response) => {
       if (!opportunity) return sendJson(response, 404, { error: 'Oportunidad no encontrada.' })
       if (opportunity.closedAt) return sendJson(response, 409, { error: 'La oportunidad ya está cerrada.' })
       const body = await readBody(request)
-      const contactDetail = clean(body.contactDetail, 250)
+      const contactPhone = clean(body.contactPhone, 100)
+      const contactEmail = clean(body.contactEmail, 254).toLowerCase()
+      const contactDetail = contactDisplay(contactPhone, contactEmail, clean(body.contactDetail, 250))
       const contactOrigin = clean(body.contactOrigin || 'not_recorded', 30)
       const contactPreference = clean(body.contactPreference || 'not_contacted', 30)
       const contactFollowUpAt = clean(body.contactFollowUpAt, 30)
       const contactPreferenceNote = clean(body.contactPreferenceNote, 1000)
       if (!CONTACT_ORIGINS.includes(contactOrigin) || !CONTACT_PREFERENCES.includes(contactPreference)) return sendJson(response, 400, { error: 'Elegí un origen y una preferencia de contacto válidos.' })
+      if (!validPhone(contactPhone) || !validEmail(contactEmail)) return sendJson(response, 400, { error: 'Revisá el teléfono o email.' })
       if (opportunity.contactPreference === 'do_not_contact' && contactPreference !== 'do_not_contact') return sendJson(response, 409, { error: 'Una marca “No contactar” no puede revertirse desde esta pantalla.' })
       const preferenceSchedule = contactPreferenceSchedule(contactPreference)
       if (preferenceSchedule && (contactDetail.length < 2 || !validLocalDate(contactFollowUpAt))) return sendJson(response, 400, { error: 'Para agendar seguimiento o dejar una oportunidad latente, cargá un dato de contacto y una fecha de revisión.' })
@@ -791,7 +901,7 @@ const server = createServer(async (request, response) => {
         not_contacted: 'Sin contacto aún', follow_up_agreed: 'Seguimiento acordado', latent: 'Latente', not_continue: 'No continuar', do_not_contact: 'No contactar',
       }[contactPreference]
       await withTransaction(async () => {
-        await updateContactRecord.run(contactDetail, contactPermission, contactOrigin, contactPreference, contactFollowUpAt, contactPreferenceNote, updatedAt, opportunity.id, user.id)
+        await updateContactRecord.run(contactDetail, contactPhone, contactEmail, contactPermission, contactOrigin, contactPreference, contactFollowUpAt, contactPreferenceNote, updatedAt, opportunity.id, user.id)
         await addEvent(user.id, opportunity.id, 'contact_preference_updated', 'Preferencia de seguimiento actualizada', `${preferenceLabel}${contactPreferenceNote ? `: ${contactPreferenceNote}` : ''}`, 'Sin canal', updatedAt)
         if (preferenceSchedule) {
           await completeOpportunityTasks.run(opportunity.id, user.id)
@@ -835,6 +945,52 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 201, await dashboard(user))
     }
 
+    const ownerDirectMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/owner-direct-status$/)
+    if (request.method === 'PUT' && ownerDirectMatch) {
+      const user = await requireUser(request, response); if (!user) return
+      const opportunity = await getOpportunity.get(ownerDirectMatch[1], user.id)
+      if (!opportunity) return sendJson(response, 404, { error: 'Oportunidad no encontrada.' })
+      if (opportunity.closedAt) return sendJson(response, 409, { error: 'La oportunidad ya está cerrada.' })
+      const ownerDirectStatus = clean((await readBody(request)).ownerDirectStatus, 40)
+      if (!OWNER_DIRECT_STATUSES.includes(ownerDirectStatus)) return sendJson(response, 400, { error: 'Elegí una señal de dueño directo válida.' })
+      if (ownerDirectStatus === opportunity.ownerDirectStatus) return sendJson(response, 200, await dashboard(user))
+      const updatedAt = now()
+      const label = {
+        a_verificar: 'A verificar', declared_en_aviso: 'Declarado en aviso', no_aplica: 'No aplica',
+      }[ownerDirectStatus]
+      await withTransaction(async () => {
+        await updateOwnerDirectStatus.run(ownerDirectStatus, updatedAt, opportunity.id, user.id)
+        await addEvent(user.id, opportunity.id, 'owner_direct_status_updated', 'Señal de dueño directo actualizada', label, 'Sin canal', updatedAt)
+      })
+      return sendJson(response, 200, await dashboard(user))
+    }
+
+    const convertClientMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/convert-client$/)
+    if (request.method === 'POST' && convertClientMatch) {
+      const user = await requireUser(request, response); if (!user) return
+      const opportunity = await getOpportunity.get(convertClientMatch[1], user.id)
+      if (!opportunity) return sendJson(response, 404, { error: 'Oportunidad no encontrada.' })
+      if (opportunity.clientId) return sendJson(response, 409, { error: 'Esta oportunidad ya fue convertida en cliente.' })
+      if (opportunity.contactPreference === 'do_not_contact' || opportunity.contactPermission === 'do_not_contact') return sendJson(response, 409, { error: 'Una oportunidad marcada como “No contactar” no puede convertirse en cliente desde esta pantalla.' })
+      if (['Perdida', 'Sin seguimiento'].includes(opportunity.status)) return sendJson(response, 409, { error: 'Una oportunidad descartada o perdida no puede convertirse en cliente.' })
+      const body = await readBody(request)
+      const conversionReason = clean(body.conversionReason, 40)
+      const convertedAt = clean(body.convertedAt, 30)
+      if (body.confirmed !== true || !CLIENT_CONVERSION_REASONS.includes(conversionReason) || !validLocalDate(convertedAt)) return sendJson(response, 400, { error: 'Confirmá una relación comercial real, su motivo y una fecha válida.' })
+      const clientId = randomUUID()
+      const updatedAt = now()
+      const reason = CLIENT_CONVERSION_LABELS[conversionReason]
+      const nextStep = 'Definir plan de captación'
+      await withTransaction(async () => {
+        await insertClient.run(clientId, user.id, opportunity.id, conversionReason, convertedAt, updatedAt)
+        await completeOpportunityTasks.run(opportunity.id, user.id)
+        await updateOpportunityClient.run(clientId, reason, nextStep, convertedAt, updatedAt, opportunity.id, user.id)
+        await addTask(user.id, opportunity.id, nextStep, opportunity.name, convertedAt, 'Sin canal', 'Alta')
+        await addEvent(user.id, opportunity.id, 'client_confirmed', 'Cliente confirmado', `${reason}. Conversión registrada el ${convertedAt}.`, 'Sin canal', updatedAt)
+      })
+      return sendJson(response, 201, await dashboard(user))
+    }
+
     const preparationMatch = url.pathname.match(/^\/api\/opportunities\/([\w-]+)\/contact-preparation$/)
     if (request.method === 'PUT' && preparationMatch) {
       const user = await requireUser(request, response); if (!user) return
@@ -869,17 +1025,41 @@ const server = createServer(async (request, response) => {
       const event = EVENTS[eventType]
       const notes = clean(body.notes, 3000)
       const channel = clean(body.channel, 30)
+      const contactResult = clean(body.contactResult, 40)
       const nextStep = clean(body.nextStep, 160)
       const nextStepDate = clean(body.nextStepDate, 30)
       if (!event || !CHANNELS.includes(channel)) return sendJson(response, 400, { error: 'Elegí un resultado y un canal válidos.' })
+      if (contactResult && !CONTACT_RESULTS.includes(contactResult)) return sendJson(response, 400, { error: 'Elegí un resultado de contacto válido.' })
       if ((opportunity.contactPreference === 'do_not_contact' || opportunity.contactPermission === 'do_not_contact') && eventType !== 'opportunity_lost') return sendJson(response, 409, { error: 'Esta oportunidad está marcada como “No contactar”. Solo puede cerrarse o revisarse internamente.' })
       if (eventType === 'contact_attempted' && PORTAL_SOURCES.includes(opportunity.source) && opportunity.contactPreparationStatus !== 'ready') return sendJson(response, 409, { error: 'Completá la verificación de contacto antes de registrar un contacto desde un portal.' })
-      if (!event.closed && nextStep.length < 2) return sendJson(response, 400, { error: 'Las oportunidades abiertas deben conservar un próximo paso.' })
+      const resultMeta = contactResult ? CONTACT_RESULT_META[contactResult] : null
+      const preferenceSchedule = resultMeta?.preference ? contactPreferenceSchedule(resultMeta.preference) : null
+      const endsCommercialFlow = ['no_continuar', 'no_contactar'].includes(contactResult)
+      if (!event.closed && !endsCommercialFlow && nextStep.length < 2) return sendJson(response, 400, { error: 'Las oportunidades abiertas deben conservar un próximo paso.' })
+      if (preferenceSchedule && (opportunity.contactDetail.length < 2 || !validLocalDate(nextStepDate))) return sendJson(response, 400, { error: 'Para dejar seguimiento o una oportunidad latente, cargá un dato de contacto y una fecha de revisión.' })
+      if (!endsCommercialFlow && nextStepDate && !validLocalDate(nextStepDate)) return sendJson(response, 400, { error: 'La fecha del próximo paso debe ser válida.' })
       const updatedAt = now()
-      const reason = notes || event.label
+      const label = resultMeta ? `${event.label} · ${resultMeta.label}` : event.label
+      const reason = notes || label
       await withTransaction(async () => {
-        await addEvent(user.id, opportunity.id, eventType, event.label, notes, channel, updatedAt)
+        await addEvent(user.id, opportunity.id, eventType, label, notes, channel, updatedAt, contactResult)
         await completeOpportunityTasks.run(opportunity.id, user.id)
+        if (contactResult === 'no_contactar') {
+          await updateContactOutcome.run('do_not_contact', 'do_not_contact', '', notes.slice(0, 1000), updatedAt, opportunity.id, user.id)
+          await updateOpportunityProgress.run('No contactar', reason, 'No contactar', '', updatedAt, null, opportunity.id, user.id)
+          return
+        }
+        if (contactResult === 'no_continuar') {
+          await updateContactOutcome.run(contactPermissionFor('not_continue', opportunity.contactOrigin), 'not_continue', '', notes.slice(0, 1000), updatedAt, opportunity.id, user.id)
+          await updateOpportunityProgress.run('Sin seguimiento', reason, '', '', updatedAt, updatedAt, opportunity.id, user.id)
+          return
+        }
+        if (preferenceSchedule) {
+          await updateContactOutcome.run(contactPermissionFor(resultMeta.preference, opportunity.contactOrigin), resultMeta.preference, nextStepDate, notes.slice(0, 1000), updatedAt, opportunity.id, user.id)
+          await updateOpportunityProgress.run(preferenceSchedule.status, reason, preferenceSchedule.step, nextStepDate, updatedAt, null, opportunity.id, user.id)
+          await addTask(user.id, opportunity.id, preferenceSchedule.task, opportunity.name, nextStepDate, 'Sin canal', preferenceSchedule.priority)
+          return
+        }
         await updateOpportunityProgress.run(event.status, reason, event.closed ? '' : nextStep, event.closed ? '' : nextStepDate, updatedAt, event.closed ? updatedAt : null, opportunity.id, user.id)
         if (!event.closed) await addTask(user.id, opportunity.id, nextStep, opportunity.name, nextStepDate, channel, ['valuation_scheduled', 'valuation_completed', 'proposal_sent'].includes(eventType) ? 'Alta' : 'Media')
       })

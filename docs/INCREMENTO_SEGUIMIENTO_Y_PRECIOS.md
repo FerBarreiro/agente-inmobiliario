@@ -9,8 +9,8 @@
 Convertir una oportunidad revisada en una rutina comercial ordenada sin transformar el Radar en una base de contactos extraídos de portales.
 
 ```text
-hallazgo manual → oportunidad sin contacto
-                 → carga manual de dato y origen, si corresponde
+hallazgo manual → oportunidad sin contacto o con datos manuales marcados “Aviso a verificar”
+                 → carga o corrección manual de teléfono/email y origen, si corresponde
                  → primer contacto manual con borrador copiable
                  → preferencia: seguimiento / latente / no continuar / no contactar
                  → revisión humana o cierre
@@ -22,9 +22,9 @@ El producto no interpreta que una baja de precio pruebe que una persona no pudo 
 
 ### Contacto después de Radar
 
-Una oportunidad creada desde Radar continúa naciendo sin datos personales. En su ficha aparece **Contacto y preferencia**, donde el usuario puede cargar manualmente:
+Una oportunidad creada desde Radar puede llegar sin datos personales o con teléfono/WhatsApp y email que el usuario cargó manualmente en campos específicos de Radar. En este último caso se trasladan como `Aviso a verificar`, sin permiso de contacto. En su ficha aparece **Contacto y preferencia**, donde el usuario puede cargar o corregir manualmente:
 
-- dato de contacto mínimo: teléfono, email o usuario, si resulta necesario;
+- teléfono/WhatsApp y email en campos separados, si resultan necesarios;
 - origen: aportado directamente, consulta entrante, relación previa, aviso a verificar, otro o no cargado;
 - preferencia de seguimiento y nota breve;
 - fecha de revisión sólo cuando corresponde.
@@ -55,8 +55,8 @@ El borrador editable y copiable existente se conserva. No se envían WhatsApps, 
 
 ## Reglas de protección
 
-1. El Radar no guarda contactos, fotografías ni textos completos de avisos.
-2. Los datos de contacto se cargan únicamente en la oportunidad, aislados por `user_id`.
+1. El Radar no extrae contactos, fotografías ni textos completos de avisos; sólo conserva teléfono/email que el usuario decide cargar manualmente en sus campos privados.
+2. Los datos de contacto se guardan aislados por `user_id` y se trasladan desde Radar únicamente por conversión explícita.
 3. Las fuentes de portal requieren el checklist persistente antes de registrar `Contacto intentado`.
 4. Un aviso que indique “inmobiliarias abstenerse” y una preferencia `No contactar` bloquean los contactos comerciales.
 5. Llamada y WhatsApp requieren que el usuario deje constancia de haber verificado No Llame; Agente+ no consulta ni certifica ese registro.
